@@ -1,0 +1,3 @@
+-- Vedi migrazione applicata al progetto Supabase workinprogress-hq (xhrycvwsnutuvziesbzb).
+-- Tabelle: contents, ideas, agent_runs, settings + RLS + seed piano editoriale luglio 2026.
+-- La copia autoritativa è nella cronologia migrazioni del progetto Supabase.
