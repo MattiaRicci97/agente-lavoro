@@ -252,7 +252,7 @@ const MODELS = [
 
 /* ============ STATO E API ============ */
 let KEY = localStorage.getItem(KEY_STORE) || "";
-let S = { view:"oggi", loaded:false, contents:[], ideas:[], runs:[], settings:{model:"claude-opus-4-8",has_api_key:false}, teamSel:"" };
+let S = { view:"oggi", loaded:false, contents:[], ideas:[], runs:[], settings:{model:"claude-opus-4-8",has_api_key:false}, teamSel:"", running:{}, archRole:"", archQ:"" };
 
 async function api(action, payload){
   const res = await fetch(API_URL, {
@@ -344,6 +344,7 @@ const VIEWS=[
  {id:"pipeline",label:"Pipeline",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="5" height="13" rx="1"/></svg>'},
  {id:"calendario",label:"Calendario",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>'},
  {id:"team",label:"Team AI",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16.5 14.7c2.6.3 4.4 2 5 5.3"/></svg>'},
+ {id:"archivio",label:"Archivio",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>'},
  {id:"idee",label:"Idee",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 1 3.5 10.9c-.9.7-1.5 1.3-1.5 2.1h-4c0-.8-.6-1.4-1.5-2.1A6 6 0 0 1 12 3z"/></svg>'},
  {id:"impostazioni",label:"Impostazioni",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>'}
 ];
@@ -363,6 +364,8 @@ function renderNav(){
     let cnt="";
     if(v.id==="pipeline")cnt=`<span class="cnt">${active}</span>`;
     if(v.id==="idee")cnt=`<span class="cnt">${S.ideas.length}</span>`;
+    if(v.id==="archivio")cnt=`<span class="cnt">${S.runs.length}</span>`;
+    if(v.id==="team"&&Object.keys(S.running).length)cnt=`<span class="cnt" style="color:var(--lime)">${Object.keys(S.running).length}⚙</span>`;
     return `<button class="nav-btn ${S.view===v.id?"on":""}" data-view="${v.id}">${v.icon}<span>${v.label}</span>${cnt}</button>`
   }).join("");
 }
@@ -528,7 +531,7 @@ function renderTeam(){
   <header class="page-head">
     <span class="eyebrow">Team AI · la tua redazione</span>
     <h1>Otto specialisti al lavoro per te</h1>
-    <p>Scegli il contenuto, poi metti al lavoro lo specialista giusto: lavora davvero, qui, e il risultato resta salvato nella scheda del contenuto.</p>
+    <p>Scegli il contenuto e avvia gli specialisti che ti servono — anche più di uno in contemporanea. Ogni risultato viene salvato nell'Archivio e nella scheda del contenuto.</p>
   </header>
   ${S.settings.has_api_key?"":`<div class="card" style="border-color:rgba(242,184,75,.45)">
     <b style="color:var(--warn)">Team fermo:</b> <span class="muted">configura la chiave API Anthropic in <a href="#" data-view="impostazioni" style="color:var(--teal)">Impostazioni</a> per attivare gli agenti.</span>
@@ -546,21 +549,25 @@ function renderTeam(){
       <h3>${esc(r.name)}</h3>
       <p>${esc(r.who)}</p>
       <div class="out">${esc(r.out)}</div>
-      <button class="btn ${S.settings.has_api_key?"primary":""}" data-work="${r.id}">Metti al lavoro</button>
+      ${S.running[r.id]
+        ?`<button class="btn" disabled><span class="spinner" style="width:15px;height:15px;border-width:2px;margin:0"></span> Sta lavorando…</button>`
+        :`<button class="btn ${S.settings.has_api_key?"primary":""}" data-work="${r.id}">Metti al lavoro</button>`}
     </div>`).join("")}
   </div>
-  <div class="sect"><h2>Ultimi lavori del team</h2><span class="mutex">clicca per rileggere</span></div>
-  ${runs.length?`<div class="card">${runs.map(runRow).join("")}</div>`
+  <div class="sect"><h2>Ultimi lavori del team</h2><span class="mutex">clicca per rileggere</span>
+    <button class="btn small ghost" data-view="archivio" style="margin-left:auto;color:var(--teal)">Apri l'Archivio →</button></div>
+  ${runs.length?`<div class="card">${runs.slice(0,8).map(r=>runRow(r)).join("")}</div>`
     :`<div class="empty-note">Nessun lavoro ancora. Seleziona un contenuto e metti al lavoro il primo specialista.</div>`}`;
   $("#team-content").addEventListener("change",e=>{S.teamSel=e.target.value});
 }
-function runRow(r){
+function runRow(r,withDelete){
   const role=roleOf(r.role);
   return `<div class="run-row" data-run="${r.id}">
     <span style="flex:none">${role.emoji}</span>
     <div style="min-width:0"><div class="t">${esc(role.name)}${r.status==="error"?' <span class="chip err">errore</span>':""}</div>
     <div class="sub">${esc(r.content_title||"Progetto generale")}</div></div>
-    <span class="when">${esc(fmtDateTime(r.created_at))}</span></div>`;
+    <span class="when">${esc(fmtDateTime(r.created_at))}</span>
+    ${withDelete?`<button class="btn small ghost" data-del-run="${r.id}" title="Elimina questo lavoro" aria-label="Elimina" style="color:var(--ink3);flex:none">✕</button>`:""}</div>`;
 }
 function openWork(roleId){
   const role=roleOf(roleId);
@@ -577,25 +584,40 @@ function openWork(roleId){
       <button class="btn primary" id="work-go">Avvia ${esc(role.name)}</button>
       <div class="right"><button class="btn ghost" data-close>Annulla</button></div>
     </div>`);
-  $("#work-go").addEventListener("click",async ()=>{
+  $("#work-go").addEventListener("click",()=>{
     const extra=$("#work-extra").value.trim();
-    openModal(`<h2>${role.emoji} ${esc(role.name)} sta lavorando…</h2>
-      <div style="padding:26px 0"><div class="spinner"></div></div>
-      <p class="muted" style="text-align:center;font-size:13.5px">Sta ragionando sul contenuto e scrivendo il deliverable.<br>Può richiedere uno o due minuti: non chiudere la pagina.</p>`);
-    try{
-      const {run}=await api("agent.run",{role:roleId,content_id:c?c.id:null,extra});
-      S.runs.unshift(run);
-      openRun(run.id);
-      toast("Lavoro completato e salvato");
-    }catch(err){
-      closeModal();fail(err);
-      try{await loadState();render();}catch(e2){}
-    }
+    closeModal();
+    startWork(roleId,c,extra);
   });
 }
-function openRun(id){
+async function startWork(roleId,c,extra){
+  const role=roleOf(roleId);
+  S.running[roleId]=true;
+  if(S.view==="team")render();
+  toast(role.emoji+" "+role.name+" è al lavoro — puoi avviare altri agenti nel frattempo");
+  try{
+    const {run}=await api("agent.run",{role:roleId,content_id:c?c.id:null,extra});
+    S.runs.unshift(run);
+    toast(role.emoji+" "+role.name+" ha finito: trovi il lavoro nell'Archivio");
+  }catch(err){
+    toast(role.name+": "+(err.message||"errore"),true);
+  }finally{
+    delete S.running[roleId];
+    if(S.view==="team"||S.view==="archivio")render();
+  }
+}
+async function openRun(id){
   const r=S.runs.find(x=>x.id===id);if(!r)return;
   const role=roleOf(r.role);
+  if(r.output===undefined||r.output===null){
+    openModal(`<h2>${role.emoji} ${esc(role.name)}</h2>
+      <div style="padding:22px 0"><div class="spinner"></div></div>
+      <p class="mutex" style="text-align:center;font-size:13px">Recupero il lavoro dall'archivio…</p>`);
+    try{
+      const {run}=await api("run.get",{id});
+      Object.assign(r,run);
+    }catch(err){closeModal();fail(err);return}
+  }
   openModal(`<h2>${role.emoji} ${esc(role.name)} · ${esc(r.content_title||"Progetto generale")}</h2>
     <p class="mutex" style="font-size:12px;margin-bottom:10px">${esc(fmtDateTime(r.created_at))} · ${esc(r.model||"")}${r.output_tokens?` · ${r.output_tokens} token generati`:""}</p>
     <div class="output-box">${esc(r.output||"(vuoto)")}</div>
@@ -606,6 +628,56 @@ function openRun(id){
   $("#copy-run").addEventListener("click",async ()=>{
     try{await navigator.clipboard.writeText(r.output||"");toast("Copiato negli appunti")}
     catch(e){toast("Copia non riuscita: seleziona il testo a mano",true)}
+  });
+}
+
+/* ============ VISTA: ARCHIVIO ============ */
+function renderArchivio(){
+  let runs=S.runs;
+  if(S.archRole)runs=runs.filter(r=>r.role===S.archRole);
+  if(S.archQ){
+    const q=S.archQ.toLowerCase();
+    runs=runs.filter(r=>(r.content_title||"Progetto generale").toLowerCase().includes(q));
+  }
+  const groups=new Map();
+  for(const r of runs){
+    const k=r.content_id||("t:"+(r.content_title||"Progetto generale"));
+    if(!groups.has(k))groups.set(k,[]);
+    groups.get(k).push(r);
+  }
+  let out="";
+  for(const [k,rs] of groups){
+    const c=S.contents.find(x=>x.id===rs[0].content_id);
+    const title=rs[0].content_title||"Progetto generale";
+    out+=`<div class="card">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+        <h3 style="margin:0">${esc(title)}</h3>
+        ${c?rubricaChip(c.rubrica):""}
+        ${c?`<span class="chip">${esc(c.formato)}</span>`:""}
+        <span class="mutex" style="font-size:12px;margin-left:auto">${rs.length} ${rs.length===1?"lavoro":"lavori"}</span>
+      </div>
+      ${rs.map(r=>runRow(r,true)).join("")}
+    </div>`;
+  }
+  $("#main").innerHTML=`
+  <header class="page-head">
+    <span class="eyebrow">Archivio dei lavori</span>
+    <h1>Tutto quello che il team ha prodotto</h1>
+    <p>Ogni lavoro degli agenti è salvato qui per sempre, raggruppato per contenuto. Clicca per rileggere e copiare, ✕ per eliminare.</p>
+  </header>
+  <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <select id="arch-role" style="flex:0 1 260px">
+      <option value="">Tutti gli specialisti</option>
+      ${ROLES.map(r=>`<option value="${r.id}" ${S.archRole===r.id?"selected":""}>${r.emoji} ${esc(r.name)}</option>`).join("")}
+    </select>
+    <input id="arch-q" placeholder="Cerca per contenuto…" value="${esc(S.archQ)}" style="flex:1;min-width:180px">
+  </div>
+  ${out||`<div class="empty-note">${S.runs.length?"Nessun lavoro corrisponde ai filtri.":"L'archivio è vuoto: vai nel Team AI e metti al lavoro il primo specialista."}</div>`}`;
+  $("#arch-role").addEventListener("change",e=>{S.archRole=e.target.value;render()});
+  $("#arch-q").addEventListener("input",e=>{
+    S.archQ=e.target.value;
+    clearTimeout(renderArchivio._t);
+    renderArchivio._t=setTimeout(()=>{const pos=e.target.selectionStart;render();const el=$("#arch-q");if(el){el.focus();el.setSelectionRange(pos,pos)}},350);
   });
 }
 
@@ -786,7 +858,7 @@ document.addEventListener("click",async e=>{
   const wk=e.target.closest("[data-work]");
   if(wk){openWork(wk.dataset.work);return}
   const rn=e.target.closest("[data-run]");
-  if(rn){openRun(rn.dataset.run);return}
+  if(rn&&!e.target.closest("[data-del-run]")){openRun(rn.dataset.run);return}
   const pr=e.target.closest("[data-promote]");
   if(pr){
     try{
@@ -806,6 +878,17 @@ document.addEventListener("click",async e=>{
     }catch(err){fail(err)}
     return;
   }
+  const dr=e.target.closest("[data-del-run]");
+  if(dr){
+    e.stopPropagation();
+    if(!confirm("Eliminare definitivamente questo lavoro dall'archivio?"))return;
+    try{
+      await api("run.delete",{id:dr.dataset.delRun});
+      S.runs=S.runs.filter(x=>x.id!==dr.dataset.delRun);
+      render();toast("Lavoro eliminato");
+    }catch(err){fail(err)}
+    return;
+  }
 });
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
 
@@ -813,7 +896,7 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
 function render(){
   renderNav();
   ({oggi:renderOggi,pipeline:renderPipeline,calendario:renderCalendario,
-    team:renderTeam,idee:renderIdee,impostazioni:renderImpostazioni}[S.view]||renderOggi)();
+    team:renderTeam,archivio:renderArchivio,idee:renderIdee,impostazioni:renderImpostazioni}[S.view]||renderOggi)();
   window.scrollTo(0,0);
 }
 async function boot(){

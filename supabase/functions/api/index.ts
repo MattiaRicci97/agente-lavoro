@@ -213,7 +213,10 @@ Deno.serve(async (req) => {
         const [contents, ideas, runs] = await Promise.all([
           db.from("contents").select("*").order("data_pub", { ascending: true, nullsFirst: false }),
           db.from("ideas").select("*").order("created_at", { ascending: false }),
-          db.from("agent_runs").select("*").order("created_at", { ascending: false }).limit(40),
+          // metadati soltanto: l'output completo si recupera con run.get
+          db.from("agent_runs")
+            .select("id, content_id, content_title, role, role_name, model, status, input_tokens, output_tokens, created_at")
+            .order("created_at", { ascending: false }).limit(300),
         ]);
         return json({
           contents: contents.data ?? [],
@@ -274,6 +277,17 @@ Deno.serve(async (req) => {
       }
       case "agent.run":
         return await runAgent(payload, settings);
+      case "run.get": {
+        const { data, error } = await db.from("agent_runs").select("*").eq("id", payload.id).maybeSingle();
+        if (error) throw new Error(error.message);
+        if (!data) return json({ error: "Lavoro non trovato" }, 404);
+        return json({ run: data });
+      }
+      case "run.delete": {
+        const { error } = await db.from("agent_runs").delete().eq("id", payload.id);
+        if (error) throw new Error(error.message);
+        return json({ ok: true });
+      }
       case "page.set": {
         if (typeof payload.html !== "string" || payload.html.length < 100) {
           return json({ error: "HTML mancante" }, 400);
