@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorkInProgress HQ</title>
+</head>
+<body>
+<style>
+:root{
+  --bg:#0B1626; --surface:#12233B; --surface2:#182E4C; --line:#22395A;
+  --ink:#EAF2FA; --ink2:#9FB4CC; --ink3:#6C82A0;
+  --teal:#35E0CD; --teal-dim:rgba(53,224,205,.13);
+  --lime:#CDF556; --lime-dim:rgba(205,245,86,.12);
+  --warn:#F2B84B; --danger:#F0705F; --ok:#4ADE94;
+  --r:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--ink);
+  font-family:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);
+  border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--teal);outline-offset:1px}
+::placeholder{color:var(--ink3)}
+h1,h2,h3{text-wrap:balance;line-height:1.25}
+
+.app{display:flex;min-height:100vh}
+.side{width:224px;flex:none;border-right:1px solid var(--line);padding:22px 14px;
+  display:flex;flex-direction:column;gap:6px;position:sticky;top:0;height:100vh}
+.logo{display:flex;align-items:center;gap:10px;padding:0 8px 18px}
+.logo svg{flex:none}
+.logo b{font-size:16px;letter-spacing:-.01em}
+.logo b i{font-style:normal;color:var(--teal)}
+.logo small{display:block;font-size:10.5px;color:var(--ink3);letter-spacing:.12em;text-transform:uppercase}
+.nav-btn{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:9px;
+  color:var(--ink2);font-size:14.5px;text-align:left;width:100%}
+.nav-btn svg{flex:none;opacity:.75}
+.nav-btn:hover{background:var(--surface);color:var(--ink)}
+.nav-btn.on{background:var(--teal-dim);color:var(--teal)}
+.nav-btn.on svg{opacity:1}
+.nav-btn .cnt{margin-left:auto;font-size:11.5px;color:var(--ink3);font-variant-numeric:tabular-nums}
+.side-foot{margin-top:auto;padding:10px 8px;font-size:11.5px;color:var(--ink3);line-height:1.5}
+
+main{flex:1;min-width:0;padding:30px 34px 90px;max-width:1180px}
+.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);font-weight:600}
+.page-head{margin-bottom:24px}
+.page-head h1{font-size:26px;letter-spacing:-.02em;margin-top:2px}
+.page-head p{color:var(--ink2);max-width:62ch;margin-top:4px}
+
+.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border-radius:9px;
+  background:var(--surface2);border:1px solid var(--line);font-size:14px;color:var(--ink)}
+.btn:hover{border-color:var(--teal)}
+.btn.primary{background:var(--teal);border-color:var(--teal);color:#062723;font-weight:600}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.small{padding:4px 10px;font-size:12.5px;border-radius:7px}
+.btn.ghost{background:none}
+.btn.danger{color:var(--danger);border-color:rgba(240,112,95,.4)}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:26px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.tile .lab{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-weight:600}
+.tile .val{font-size:27px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin-top:2px}
+.tile .sub{font-size:12px;color:var(--ink2)}
+.tile.hot{border-color:rgba(205,245,86,.35);background:linear-gradient(160deg,var(--lime-dim),var(--surface) 55%)}
+.tile.hot .val{color:var(--lime)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;margin-bottom:14px}
+.card h3{font-size:16px;margin-bottom:4px}
+.muted{color:var(--ink2)}.mutex{color:var(--ink3)}
+.sect{margin:26px 0 12px;display:flex;align-items:baseline;gap:10px}
+.sect h2{font-size:17px;letter-spacing:-.01em}
+.sect .mutex{font-size:13px}
+
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;
+  padding:2.5px 9px;border-radius:99px;background:var(--surface2);color:var(--ink2);white-space:nowrap}
+.chip .dot{width:7px;height:7px;border-radius:50%;flex:none}
+.chip.status{background:var(--bg);border:1px solid var(--line)}
+.chip.late{background:rgba(240,112,95,.15);color:var(--danger)}
+.chip.today{background:var(--lime-dim);color:var(--lime)}
+.chip.done{background:rgba(74,222,148,.13);color:var(--ok)}
+
+.row-item{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+.row-item:last-child{border-bottom:none}
+.row-item:hover .t{color:var(--teal)}
+.row-item .t{font-weight:600;font-size:14.5px}
+.row-item .meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:3px}
+.row-item .when{margin-left:auto;flex:none;text-align:right;font-size:12.5px;color:var(--ink2);font-variant-numeric:tabular-nums}
+
+.board{display:flex;gap:12px;overflow-x:auto;padding-bottom:14px;align-items:flex-start}
+.col{flex:0 0 248px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.col-h{display:flex;align-items:center;gap:8px;padding:0 4px 10px;font-size:12px;font-weight:700;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink2)}
+.col-h .n{margin-left:auto;color:var(--ink3);font-variant-numeric:tabular-nums}
+.kcard{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer}
+.kcard:hover{border-color:var(--teal)}
+.kcard .t{font-size:13.5px;font-weight:600;line-height:1.35}
+.kcard .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.kcard .foot{display:flex;align-items:center;margin-top:8px;gap:6px}
+.kcard .date{font-size:11.5px;color:var(--ink3);font-variant-numeric:tabular-nums}
+.mv{margin-left:auto;display:flex;gap:2px}
+.mv button{padding:2px 7px;border-radius:6px;color:var(--ink3);font-size:13px;border:1px solid transparent}
+.mv button:hover{color:var(--teal);border-color:var(--line);background:var(--surface2)}
+
+.week{margin-bottom:22px}
+.week-h{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.week-h b{font-size:14px}
+.week-h.now b{color:var(--lime)}
+.slot{display:flex;gap:12px;align-items:center;padding:9px 12px;border:1px solid var(--line);
+  border-radius:10px;margin-bottom:6px;background:var(--surface)}
+.slot.empty{border-style:dashed;background:none;color:var(--ink3)}
+.slot .day{flex:none;width:44px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink3);font-variant-numeric:tabular-nums;line-height:1.3}
+.slot.todayrow{border-color:rgba(205,245,86,.45)}
+.slot.todayrow .day{color:var(--lime)}
+.slot .body{min-width:0;flex:1;cursor:pointer}
+.slot .body:hover .t{color:var(--teal)}
+.slot .t{font-size:13.5px;font-weight:600}
+.slot .f{font-size:12px;color:var(--ink2)}
+
+.team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px}
+.agent{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;display:flex;flex-direction:column;gap:8px}
+.agent .ic{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-size:19px;background:var(--teal-dim)}
+.agent h3{font-size:15px}
+.agent p{font-size:13px;color:var(--ink2);flex:1}
+.agent .out{font-size:11.5px;color:var(--ink3)}
+
+.idea{display:flex;gap:12px;align-items:flex-start;padding:12px 4px;border-bottom:1px solid var(--line)}
+.idea:last-child{border-bottom:none}
+.idea .tx{flex:1;font-size:14px}
+.idea .acts{display:flex;gap:6px;flex:none}
+
+.backdrop{position:fixed;inset:0;background:rgba(4,10,20,.72);display:flex;
+  align-items:flex-start;justify-content:center;padding:5vh 16px;z-index:50;overflow-y:auto}
+.modal{background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  width:100%;max-width:640px;padding:24px;margin-bottom:5vh}
+.modal h2{font-size:18px;margin-bottom:14px}
+.frm{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.frm .full{grid-column:1/-1}
+.frm label{display:block;font-size:11.5px;font-weight:600;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink3);margin-bottom:4px}
+.modal-foot{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
+.modal-foot .right{margin-left:auto;display:flex;gap:8px}
+.check{display:flex;align-items:center;gap:9px;padding:6px 2px;font-size:13.5px;color:var(--ink2);cursor:pointer}
+.check input{width:15px;height:15px;accent-color:var(--teal);flex:none}
+.check.on{color:var(--ink)}
+.bar{height:5px;border-radius:99px;background:var(--bg);overflow:hidden;margin:6px 0 2px}
+.bar i{display:block;height:100%;background:var(--teal);border-radius:99px}
+.prompt-box{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;
+  font-family:ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace;font-size:12px;line-height:1.6;
+  white-space:pre-wrap;max-height:46vh;overflow-y:auto;color:var(--ink2)}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--teal);
+  color:#062723;font-weight:600;font-size:14px;padding:10px 20px;border-radius:99px;z-index:99;
+  box-shadow:0 6px 24px rgba(0,0,0,.4)}
+.empty-note{padding:26px;text-align:center;color:var(--ink3);font-size:14px;
+  border:1px dashed var(--line);border-radius:var(--r)}
+
+@media (prefers-reduced-motion:no-preference){
+  .kcard,.btn,.nav-btn,.row-item .t{transition:border-color .15s,background .15s,color .15s}
+  .toast{animation:pop .2s ease-out}
+  @keyframes pop{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+}
+@media (max-width:840px){
+  .app{flex-direction:column}
+  .side{width:100%;height:auto;position:fixed;bottom:0;top:auto;z-index:40;
+    flex-direction:row;align-items:center;padding:6px 8px;gap:2px;
+    background:var(--surface);border-right:none;border-top:1px solid var(--line)}
+  .logo,.side-foot{display:none}
+  .nav-btn{flex-direction:column;gap:3px;font-size:10px;padding:6px 4px;flex:1;align-items:center}
+  .nav-btn .cnt{display:none}
+  main{padding:22px 16px 110px}
+  .frm{grid-template-columns:1fr}
+}
+</style>
+
+<div class="app">
+<aside class="side">
+  <div class="logo">
+    <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+      <circle cx="17" cy="17" r="15" fill="none" stroke="#35E0CD" stroke-width="2"/>
+      <path d="M17 6 L20.5 17 L17 28 L13.5 17 Z" fill="#35E0CD"/>
+      <path d="M17 6 L20.5 17 L17 17 Z" fill="#CDF556"/>
+      <circle cx="17" cy="17" r="2.2" fill="#0B1626"/>
+    </svg>
+    <b>Work<i>In</i>Progress<small>HQ · Redazione</small></b>
+  </div>
+  <nav id="nav"></nav>
+  <div class="side-foot">La bussola del lavoro.<br>Blu scuro · turchese · lime.</div>
+</aside>
+<main id="main"></main>
+</div>
+<div id="overlay"></div>
+
+<script>
+"use strict";
+/* ============ COSTANTI EDITORIALI (dalla Sintesi WorkInProgress) ============ */
+const RUBRICHE = {
+  "Basi di Lavoro":{c:"#35E0CD",d:"Diritto, contratti, welfare, concetti fondamentali"},
+  "FAQ Professionali":{c:"#6FB6FF",d:"Risposte rapide a domande su lavoro, HR e carriera"},
+  "WorkStat":{c:"#CDF556",d:"Dati ISTAT/Eurostat spiegati con grafici"},
+  "HR Tech & Cyber":{c:"#B490F5",d:"AI recruiting, privacy, e-HR, automazione"},
+  "Sociologia & Organizzazione":{c:"#F2B84B",d:"Culture, ruoli, gruppi, cambiamento"},
+  "Talent & Performance":{c:"#F58FB8",d:"Motivazione, potenziale, premi, competenze"},
+  "News Flash":{c:"#F0705F",d:"Novità normative e di mercato"},
+  "Mix":{c:"#9FB4CC",d:"Contenuti trasversali (es. newsletter)"}
+};
+const FORMATI = ["Short 60″","Mini-lezione 5′","Video lungo 15-20′","Post LinkedIn","Newsletter","Infografica","News Flash","Report dati"];
+const STATUSES = [
+  {id:"idea",label:"Idea"},{id:"fonti",label:"Fonti"},{id:"scaletta",label:"Scaletta"},
+  {id:"script",label:"Script"},{id:"produzione",label:"Produzione"},
+  {id:"pubblicato",label:"Pubblicato"},{id:"riciclo",label:"Riciclo"}
+];
+const WORKFLOW = [
+  "Rubrica e obiettivo scelti","Fonti raccolte e verificate","Titolo SEO + promessa + pubblico",
+  "Scaletta: hook, 3 blocchi, esempi, CTA","Script o semi-script completo",
+  "Produzione con asset brand (blu, turchese/lime, bussola)",
+  "Riciclo: short, post LinkedIn, infografica/newsletter","Metriche annotate (view, watch-time, CTR)"
+];
+const CADENZA = {
+  1:{f:"Short 60″",t:"Short teaser",d:"Anticipa il tema del video di venerdì"},
+  3:{f:"Short 60″ + Post LinkedIn",t:"Short + LinkedIn",d:"FAQ rapida o dato forte, porta traffico"},
+  5:{f:"Video lungo 15-20′",t:"Video principale",d:"Mini-lezione o approfondimento: il cuore del canale"},
+  0:{f:"Newsletter",t:"Newsletter domenicale",d:"Riassume la settimana, anticipa la prossima"}
+};
+const GIORNI = ["Dom","Lun","Mar","Mer","Gio","Ven","Sab"];
+const MESI = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
+
+const BASE_CONTEXT = `Sei parte del team editoriale di WorkInProgress, progetto digitale italiano sul mondo del lavoro. Parte da YouTube e vuole diventare un riferimento chiaro, affidabile, aggiornato e accessibile per studenti, neolaureati, early-career, lavoratori in transizione, HR, docenti e aziende.
+TONO: amichevole ma competente, chiaro, ordinato, inclusivo; non accademico in superficie ma solido nelle fonti. Spiega concetti complessi con esempi semplici. Mai professorale. Non inventare dati, norme o fonti.
+STILE VISIVO: blu scuro come base, accenti turchesi o lime, testo molto leggibile, font sans-serif, bussola minimal come simbolo. Niente razzi o cliché da startup.
+RUBRICHE: Basi di Lavoro, FAQ Professionali, WorkStat, HR Tech & Cyber, Sociologia & Organizzazione, Talent & Performance, News Flash.
+METODO: per norme, dati o attualità verifica sempre fonti aggiornate (fonti ufficiali, ISTAT, Eurostat, INPS, Ministero del Lavoro, letteratura accademica). Distingui fatti, interpretazioni e consigli. Cita la fonte interna quando usata (es. "fonte: Appunti Alleva").
+VINCOLI: il creator è una persona sola, lavora e ha poco tempo: cerca sempre il miglior compromesso tra qualità alta e sostenibilità operativa. Produci direttamente l'output; se mancano dettagli fai assunzioni ragionevoli e segnalale.`;
+
+const ROLES = [
+ {id:"capo",emoji:"🧭",name:"Caporedattore",
+  who:"Tiene la rotta: piano editoriale, priorità e coerenza col brand.",
+  out:"Piani editoriali · priorità settimanali · review di coerenza",
+  brief:`RUOLO: sei il Caporedattore di WorkInProgress.
+COMPITO: analizza la situazione che ti descrivo e proponi il piano d'azione. Quando ti passo un contenuto, valuta: coerenza con rubrica e brand, angolo migliore, promessa per lo spettatore, priorità rispetto al calendario (lun short teaser, mer short+LinkedIn, ven video lungo, dom newsletter). Se ti chiedo un piano settimanale, proponi i 4 slot completi con titoli provvisori e collegamenti tra i contenuti (lo short del lunedì anticipa il video del venerdì).
+OUTPUT: raccomandazione sintetica + piano in punti + eventuali rischi (fonti deboli, tema già coperto, carico di produzione eccessivo per un creator solo).`},
+ {id:"script",emoji:"✍️",name:"Sceneggiatore",
+  who:"Trasforma il tema in scaletta e script con hook, 3 blocchi e CTA.",
+  out:"Scalette · script completi · hook alternativi",
+  brief:`RUOLO: sei lo Sceneggiatore di WorkInProgress.
+COMPITO: per il contenuto indicato produci: 1) tre hook alternativi (primi 15 secondi, il migliore evidenziato); 2) scaletta con hook, tre blocchi centrali con esempi concreti, sintesi finale e CTA; 3) script completo o semi-script adatto al formato e alla durata; 4) indicazioni di ritmo (dove mostrare grafiche, dati a schermo, b-roll).
+Linguaggio parlato, frasi brevi, esempi della vita reale. Le affermazioni normative o numeriche vanno marcate [VERIFICA FONTE] se non certe.
+OUTPUT: hook, scaletta, script, note di regia.`},
+ {id:"seo",emoji:"🔍",name:"SEO & Titolista",
+  who:"Titoli che si fanno cliccare, keyword e descrizioni YouTube complete.",
+  out:"Titoli SEO · keyword · descrizioni con timestamp · hashtag",
+  brief:`RUOLO: sei il responsabile SEO e titolazione di WorkInProgress su YouTube.
+COMPITO: per il contenuto indicato produci: 1) cinque titoli SEO-ready (max 60 caratteri, il consigliato evidenziato, niente clickbait ingannevole); 2) keyword principale + 4-6 secondarie; 3) descrizione YouTube completa: gancio nelle prime 2 righe, riassunto, timestamp segnaposto, fonti citate, CTA, 4-6 hashtag; 4) due proposte di testo per la miniatura (max 4 parole ciascuna, alto contrasto).
+OUTPUT: titoli, keyword, descrizione pronta da incollare, testi miniatura.`},
+ {id:"data",emoji:"📊",name:"Data Analyst WorkStat",
+  who:"Trova e spiega i numeri: ISTAT, Eurostat, INPS, con idee di grafici.",
+  out:"Dati verificati · letture dei trend · specifiche per infografiche",
+  brief:`RUOLO: sei il Data Analyst della rubrica WorkStat di WorkInProgress.
+COMPITO: per il tema indicato: 1) elenca i dati più rilevanti e recenti da fonti istituzionali (ISTAT, Eurostat, INPS, Ministero del Lavoro), con riferimento preciso a dataset/report e anno — se non puoi verificare un numero, scrivi [DA VERIFICARE] e indica dove controllarlo; 2) spiega cosa dicono davvero i numeri, distinguendo fatto e interpretazione; 3) proponi 2-3 grafici (tipo di grafico, variabili, titolo, takeaway in una frase) coerenti col brand blu scuro + turchese/lime; 4) segnala trappole statistiche o letture sbagliate comuni sul tema.
+OUTPUT: dati con fonti, lettura, specifiche grafici, avvertenze.`},
+ {id:"social",emoji:"📣",name:"Social Media Manager",
+  who:"Ricicla ogni video in short e post LinkedIn che portano traffico.",
+  out:"Post LinkedIn · script short 60″ · idee caroselli",
+  brief:`RUOLO: sei il Social Media Manager di WorkInProgress.
+COMPITO: partendo dal contenuto indicato produci: 1) un post LinkedIn con apertura forte, spiegazione ordinata, esempio concreto e domanda finale che invita al commento (niente muri di hashtag: max 3); 2) script per uno short di 60 secondi derivato dal contenuto (hook nei primi 2 secondi, un solo concetto, CTA verso il video lungo o il canale); 3) un'idea di carosello/infografica Instagram (max 3 colori brand, pochi concetti per slide).
+OUTPUT: post LinkedIn pronto, script short con indicazioni visive, struttura carosello.`},
+ {id:"news",emoji:"💌",name:"Newsletter Editor",
+  who:"Confeziona la newsletter domenicale: la settimana in chiaro.",
+  out:"Newsletter complete · oggetti email · anticipazioni",
+  brief:`RUOLO: sei il Newsletter Editor di WorkInProgress.
+COMPITO: scrivi la newsletter domenicale: 1) tre proposte di oggetto email (il consigliato evidenziato, max 50 caratteri); 2) apertura calda e diretta (2-3 frasi); 3) "La settimana in breve": i contenuti pubblicati con una riga di takeaway ciascuno; 4) "Cosa è cambiato": 1-2 novità normative o di mercato con fonte; 5) anticipazione della settimana successiva; 6) CTA finale (iscrizione canale o condivisione).
+Tono da email a un amico curioso, paragrafi corti, zero gergo.
+OUTPUT: newsletter completa pronta da incollare.`},
+ {id:"art",emoji:"🎨",name:"Art Director",
+  who:"Miniature e asset visivi coerenti: blu scuro, turchese, bussola.",
+  out:"Concept miniature · prompt per grafiche · brand check",
+  brief:`RUOLO: sei l'Art Director di WorkInProgress. Brand: sfondo blu scuro, accenti turchese/lime, testo bianco leggibilissimo, font sans-serif, bussola minimal come simbolo. Niente razzi né cliché da startup.
+COMPITO: per il contenuto indicato: 1) tre concept di miniatura YouTube (composizione, testo max 4 parole, espressione/soggetto, colore dominante, cosa la rende cliccabile in feed a dimensione francobollo); 2) un prompt dettagliato pronto per un generatore di immagini o per Canva; 3) checklist brand: contrasto, leggibilità mobile, coerenza con le miniature precedenti; 4) se serve, indicazioni per banner o grafiche a schermo (1080p, area sicura centrata).
+OUTPUT: concept, prompt, checklist.`},
+ {id:"legal",emoji:"⚖️",name:"Fact-checker Normativo",
+  who:"Verifica norme e istituti prima della pubblicazione. Zero figuracce.",
+  out:"Verifiche normative · fonti ufficiali · correzioni allo script",
+  brief:`RUOLO: sei il Fact-checker normativo di WorkInProgress, esperto di diritto del lavoro italiano.
+COMPITO: per il contenuto o lo script indicato: 1) elenca ogni affermazione normativa o giuridica presente o implicita nel tema; 2) per ciascuna indica: corretta / imprecisa / da verificare, con la fonte ufficiale esatta da controllare (norma, articolo, circolare, sito istituzionale); 3) segnala se una norma citata potrebbe essere stata modificata di recente e cosa cercare per confermarlo; 4) proponi la riformulazione corretta e prudente delle frasi a rischio, mantenendo il tono divulgativo; 5) suggerisci il disclaimer minimo se il tema tocca casi personali.
+Non inventare mai riferimenti normativi: se non sei certo, scrivi [DA VERIFICARE SU FONTE UFFICIALE].
+OUTPUT: tabella delle verifiche, riformulazioni, fonti da citare in descrizione.`}
+];
+
+/* ============ STATO ============ */
+const LS_KEY = "wip_hq_v1";
+function uid(){return Math.random().toString(36).slice(2,9)}
+function seedData(){
+  const C=(title,rubrica,formato,data,fonti,cta,status)=>({
+    id:uid(),title,rubrica,formato,dataPub:data,fonti,cta,note:"",status,
+    checklist:WORKFLOW.map(()=>false),createdAt:Date.now()});
+  return {
+    view:"oggi",
+    contents:[
+      C("IA e lavoro: cosa cambia per te (Newsletter #5)","Mix","Newsletter","2026-07-05","AI Act","Iscriviti alla newsletter","script"),
+      C("Salario minimo: l'Italia ce l'ha davvero?","Basi di Lavoro","Short 60″","2026-07-06","DL 62/2026","Guarda il video di venerdì","scaletta"),
+      C("Notizia chiave della settimana (da rassegna)","News Flash","News Flash","2026-07-08","Rassegna stampa lunedì","Iscriviti al canale","idea"),
+      C("Salario minimo o salario giusto? Cosa ha deciso l'Italia","Basi di Lavoro","Mini-lezione 5′","2026-07-10","DL 62/2026","Salva per dopo","fonti"),
+      C("Salari e contratti: il punto (Newsletter #6)","Mix","Newsletter","2026-07-12","DL 62/2026 + CCNL","Iscriviti alla newsletter","idea"),
+      C("Lavorare 4 giorni a settimana: utopia?","Sociologia & Organizzazione","Short 60″","2026-07-13","Casi aziendali 2026","Guarda il video di venerdì","idea"),
+      C("Chi ha già la settimana corta in Italia","Sociologia & Organizzazione","Post LinkedIn","2026-07-15","Casi Luxottica/Intesa 2026","Commenta la tua esperienza","idea"),
+      C("Settimana corta di 4 giorni: funziona davvero? Dati e casi","Sociologia & Organizzazione","Video lungo 15-20′","2026-07-17","Appunti org./psicologia + casi 2026","Iscriviti al canale","idea"),
+      C("Tempo di lavoro e produttività (Newsletter #7)","Mix","Newsletter","2026-07-19","Appunti + attualità","Iscriviti alla newsletter","idea"),
+      C("Welfare aziendale: cos'è e perché conviene","Basi di Lavoro","Short 60″","2026-07-20","Appunti welfare aziendale","Guarda il video di venerdì","idea"),
+      C("Premi di risultato e welfare aziendale spiegati","Talent & Performance","Mini-lezione 5′","2026-07-24","Appunti premi di risultato + welfare","Salva per dopo","idea"),
+      C("Quanto vale davvero il welfare (Newsletter #8)","Mix","Newsletter","2026-07-26","Appunti welfare","Iscriviti alla newsletter","idea")
+    ],
+    ideas:[
+      {id:uid(),text:"Come si legge davvero una busta paga: serie in più puntate",rubrica:"Basi di Lavoro",createdAt:Date.now()},
+      {id:uid(),text:"L'IA legge il tuo CV? ATS e recruiting algoritmico dopo l'AI Act",rubrica:"HR Tech & Cyber",createdAt:Date.now()},
+      {id:uid(),text:"NEET in Italia: chi sono davvero, oltre i luoghi comuni",rubrica:"WorkStat",createdAt:Date.now()}
+    ]
+  };
+}
+let S;
+try{S=JSON.parse(localStorage.getItem(LS_KEY))||seedData()}catch(e){S=seedData()}
+function save(){try{localStorage.setItem(LS_KEY,JSON.stringify(S))}catch(e){}}
+
+/* ============ HELPERS ============ */
+const $=s=>document.querySelector(s);
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function todayISO(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function parseISO(s){const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)}
+function fmtDate(s){if(!s)return "senza data";const d=parseISO(s);return GIORNI[d.getDay()]+" "+d.getDate()+" "+MESI[d.getMonth()]}
+function daysTo(s){if(!s)return null;return Math.round((parseISO(s)-parseISO(todayISO()))/86400000)}
+function statusIdx(id){return STATUSES.findIndex(x=>x.id===id)}
+function isDone(c){return c.status==="pubblicato"||c.status==="riciclo"}
+function isLate(c){const d=daysTo(c.dataPub);return d!==null&&d<0&&!isDone(c)}
+function atRisk(c){ // pubblicazione vicina ma lavorazione indietro
+  const d=daysTo(c.dataPub);if(d===null||isDone(c))return false;
+  const i=statusIdx(c.status);
+  return (d<=1&&i<4)||(d<=3&&i<3)||(d<=5&&i<2);
+}
+function rubricaChip(r){const info=RUBRICHE[r]||RUBRICHE["Mix"];
+  return `<span class="chip"><span class="dot" style="background:${info.c}"></span>${esc(r)}</span>`}
+function statusChip(c){
+  if(isDone(c))return `<span class="chip done">${esc(STATUSES[statusIdx(c.status)].label)}</span>`;
+  if(isLate(c))return `<span class="chip late">In ritardo · ${esc(STATUSES[statusIdx(c.status)].label)}</span>`;
+  if(atRisk(c))return `<span class="chip late">A rischio · ${esc(STATUSES[statusIdx(c.status)].label)}</span>`;
+  return `<span class="chip status">${esc(STATUSES[statusIdx(c.status)].label)}</span>`}
+function toast(msg){const t=document.createElement("div");t.className="toast";t.textContent=msg;
+  document.body.appendChild(t);setTimeout(()=>t.remove(),2200)}
+
+/* ============ NAV ============ */
+const VIEWS=[
+ {id:"oggi",label:"Oggi",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>'},
+ {id:"pipeline",label:"Pipeline",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="5" height="13" rx="1"/></svg>'},
+ {id:"calendario",label:"Calendario",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>'},
+ {id:"team",label:"Team AI",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16.5 14.7c2.6.3 4.4 2 5 5.3"/></svg>'},
+ {id:"idee",label:"Idee",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 1 3.5 10.9c-.9.7-1.5 1.3-1.5 2.1h-4c0-.8-.6-1.4-1.5-2.1A6 6 0 0 1 12 3z"/></svg>'},
+ {id:"dati",label:"Dati",icon:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5.5" rx="8" ry="2.8"/><path d="M4 5.5V18.5c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8V5.5M4 12c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8"/></svg>'}
+];
+function renderNav(){
+  const active=S.contents.filter(c=>!isDone(c)).length;
+  $("#nav").innerHTML=VIEWS.map(v=>{
+    let cnt="";
+    if(v.id==="pipeline")cnt=`<span class="cnt">${active}</span>`;
+    if(v.id==="idee")cnt=`<span class="cnt">${S.ideas.length}</span>`;
+    return `<button class="nav-btn ${S.view===v.id?"on":""}" data-view="${v.id}">${v.icon}<span>${v.label}</span>${cnt}</button>`
+  }).join("");
+}
+
+/* ============ VISTA: OGGI ============ */
+function renderOggi(){
+  const t=todayISO(),d=new Date(),dow=d.getDay();
+  const slot=CADENZA[dow];
+  const oggi=S.contents.filter(c=>c.dataPub===t&&!isDone(c));
+  const inRitardo=S.contents.filter(isLate).sort((a,b)=>a.dataPub<b.dataPub?-1:1);
+  const prossimi=S.contents.filter(c=>{const n=daysTo(c.dataPub);return n!==null&&n>0&&n<=7&&!isDone(c)})
+    .sort((a,b)=>a.dataPub<b.dataPub?-1:1);
+  const inLav=S.contents.filter(c=>!isDone(c)&&c.status!=="idea").length;
+  const pubbl=S.contents.filter(isDone).length;
+  const prossima=S.contents.filter(c=>{const n=daysTo(c.dataPub);return n!==null&&n>=0&&!isDone(c)})
+    .sort((a,b)=>a.dataPub<b.dataPub?-1:1)[0];
+
+  let focus;
+  if(oggi.length){
+    focus=`<div class="card" style="border-color:rgba(205,245,86,.4)">
+      <span class="eyebrow" style="color:var(--lime)">In uscita oggi</span>
+      ${oggi.map(c=>`<div class="row-item" data-open="${c.id}">
+        <div style="min-width:0"><div class="t">${esc(c.title)}</div>
+        <div class="meta">${rubricaChip(c.rubrica)}<span class="chip">${esc(c.formato)}</span>${statusChip(c)}</div></div>
+        <div class="when">${prog(c)}</div></div>`).join("")}
+    </div>`;
+  }else if(slot){
+    focus=`<div class="card" style="border-color:rgba(205,245,86,.4)">
+      <span class="eyebrow" style="color:var(--lime)">Slot di oggi · ${esc(slot.t)}</span>
+      <h3 style="margin-top:6px">Oggi il calendario prevede: ${esc(slot.f)}</h3>
+      <p class="muted" style="font-size:13.5px">${esc(slot.d)}. Nessun contenuto è programmato per oggi: pianificane uno o segna lo slot come saltato senza sensi di colpa.</p>
+      <div style="margin-top:12px"><button class="btn primary" data-new-date="${t}" data-new-formato="${esc(slot.f.split(" + ")[0])}">+ Pianifica per oggi</button></div>
+    </div>`;
+  }else{
+    focus=`<div class="card">
+      <span class="eyebrow">Giornata di produzione</span>
+      <h3 style="margin-top:6px">Oggi nessuna uscita prevista dal calendario</h3>
+      <p class="muted" style="font-size:13.5px">Martedì, giovedì e sabato sono giorni per portare avanti fonti, scalette, script e montaggio. Guarda cosa è a rischio qui sotto.</p>
+    </div>`;
+  }
+
+  $("#main").innerHTML=`
+  <header class="page-head">
+    <span class="eyebrow">${GIORNI[dow]} ${d.getDate()} ${MESI[d.getMonth()]} ${d.getFullYear()}</span>
+    <h1>La rotta di oggi</h1>
+    <p>Lun short teaser · Mer short + LinkedIn · Ven video lungo · Dom newsletter.</p>
+  </header>
+  <div class="tiles">
+    <div class="tile ${oggi.length?"hot":""}"><div class="lab">In uscita oggi</div><div class="val">${oggi.length}</div></div>
+    <div class="tile"><div class="lab">In lavorazione</div><div class="val">${inLav}</div></div>
+    <div class="tile"><div class="lab">Pubblicati</div><div class="val">${pubbl}</div></div>
+    <div class="tile"><div class="lab">Banca idee</div><div class="val">${S.ideas.length}</div></div>
+    <div class="tile"><div class="lab">Prossima uscita</div>
+      <div class="val" style="font-size:16px;line-height:1.3;margin-top:6px">${prossima?esc(fmtDate(prossima.dataPub)):"—"}</div>
+      <div class="sub">${prossima?esc(prossima.formato):"pianifica dal calendario"}</div></div>
+  </div>
+  ${focus}
+  ${inRitardo.length?`<div class="sect"><h2>Da recuperare</h2><span class="mutex">uscite passate non completate</span></div>
+    <div class="card" style="border-color:rgba(240,112,95,.35)">${inRitardo.map(rowItem).join("")}</div>`:""}
+  <div class="sect"><h2>Prossimi 7 giorni</h2><span class="mutex">con segnalazione dei contenuti a rischio</span></div>
+  ${prossimi.length?`<div class="card">${prossimi.map(rowItem).join("")}</div>`
+    :`<div class="empty-note">Niente in programma nei prossimi 7 giorni. Apri il Calendario e riempi gli slot della settimana.</div>`}
+  <div class="sect"><h2>Idea al volo</h2></div>
+  <div class="card"><form id="quick-idea" style="display:flex;gap:8px;flex-wrap:wrap">
+    <input name="text" placeholder="Es. Il periodo di prova spiegato in 60 secondi…" style="flex:1;min-width:200px" required>
+    <button class="btn primary" type="submit">Salva idea</button></form></div>`;
+
+  $("#quick-idea").addEventListener("submit",e=>{
+    e.preventDefault();
+    const v=e.target.text.value.trim();if(!v)return;
+    S.ideas.unshift({id:uid(),text:v,rubrica:"Mix",createdAt:Date.now()});
+    save();toast("Idea salvata nella banca idee");render();
+  });
+}
+function prog(c){const n=c.checklist.filter(Boolean).length;return `<span style="font-variant-numeric:tabular-nums">${n}/${WORKFLOW.length}</span>`}
+function rowItem(c){
+  const n=daysTo(c.dataPub);
+  const when=n===null?"":n===0?"oggi":n===1?"domani":n<0?fmtDate(c.dataPub):fmtDate(c.dataPub);
+  return `<div class="row-item" data-open="${c.id}">
+    <div style="min-width:0"><div class="t">${esc(c.title)}</div>
+    <div class="meta">${rubricaChip(c.rubrica)}<span class="chip">${esc(c.formato)}</span>${statusChip(c)}</div></div>
+    <div class="when">${esc(when)}<br><span class="mutex">${prog(c)}</span></div></div>`;
+}
+
+/* ============ VISTA: PIPELINE ============ */
+function renderPipeline(){
+  $("#main").innerHTML=`
+  <header class="page-head">
+    <span class="eyebrow">Pipeline contenuti</span>
+    <h1>Dall'idea alla pubblicazione</h1>
+    <p>Ogni contenuto attraversa il flusso di lavoro. Usa ‹ e › per spostarlo, clicca la card per aprirla.</p>
+    <div style="margin-top:12px"><button class="btn primary" data-new-date="">+ Nuovo contenuto</button></div>
+  </header>
+  <div class="board">${STATUSES.map(st=>{
+    const items=S.contents.filter(c=>c.status===st.id).sort((a,b)=>(a.dataPub||"9")<(b.dataPub||"9")?-1:1);
+    return `<div class="col"><div class="col-h">${esc(st.label)}<span class="n">${items.length}</span></div>
+    ${items.map(c=>`<div class="kcard" data-open="${c.id}">
+      <div class="t">${esc(c.title)}</div>
+      <div class="meta">${rubricaChip(c.rubrica)}${isLate(c)||atRisk(c)?statusChip(c):""}</div>
+      <div class="foot"><span class="date">${esc(c.formato)} · ${esc(fmtDate(c.dataPub))}</span>
+      <span class="mv">${statusIdx(c.status)>0?`<button data-move="${c.id}|-1" title="Sposta indietro" aria-label="Sposta indietro">‹</button>`:""}
+      ${statusIdx(c.status)<STATUSES.length-1?`<button data-move="${c.id}|1" title="Sposta avanti" aria-label="Sposta avanti">›</button>`:""}</span></div>
+    </div>`).join("")||`<div class="mutex" style="font-size:12px;padding:4px">Vuoto</div>`}</div>`
+  }).join("")}</div>`;
+}
+
+/* ============ VISTA: CALENDARIO ============ */
+function mondayOf(d){const x=new Date(d);const wd=(x.getDay()+6)%7;x.setDate(x.getDate()-wd);return x}
+function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function renderCalendario(){
+  const start=mondayOf(new Date());
+  let out="";
+  for(let w=0;w<8;w++){
+    const mon=new Date(start);mon.setDate(mon.getDate()+w*7);
+    const sun=new Date(mon);sun.setDate(sun.getDate()+6);
+    const isNow=w===0;
+    const slotDays=[1,3,5,0].map(dow=>{
+      const dt=new Date(mon);dt.setDate(dt.getDate()+((dow===0)?6:dow-1));return {dow,dt};
+    });
+    const weekISO=new Set();for(let i=0;i<7;i++){const dd=new Date(mon);dd.setDate(dd.getDate()+i);weekISO.add(iso(dd))}
+    const extra=S.contents.filter(c=>c.dataPub&&weekISO.has(c.dataPub)&&![1,3,5,0].includes(parseISO(c.dataPub).getDay()));
+    out+=`<div class="week"><div class="week-h ${isNow?"now":""}">
+      <b>${isNow?"Questa settimana":"Settimana"}</b>
+      <span class="mutex">${mon.getDate()} ${MESI[mon.getMonth()]} – ${sun.getDate()} ${MESI[sun.getMonth()]}</span></div>
+    ${slotDays.map(({dow,dt})=>{
+      const dISO=iso(dt);
+      const items=S.contents.filter(c=>c.dataPub===dISO);
+      const slot=CADENZA[dow];
+      const isToday=dISO===todayISO();
+      if(items.length){
+        return items.map(c=>`<div class="slot ${isToday?"todayrow":""}">
+          <span class="day">${GIORNI[dow]}<br>${dt.getDate()}</span>
+          <div class="body" data-open="${c.id}"><div class="t">${esc(c.title)}</div>
+          <div class="f">${esc(c.formato)} · ${esc(c.rubrica)}</div></div>
+          ${statusChip(c)}</div>`).join("");
+      }
+      return `<div class="slot empty ${isToday?"todayrow":""}">
+        <span class="day">${GIORNI[dow]}<br>${dt.getDate()}</span>
+        <div class="body"><div class="f">${esc(slot.t)} · ${esc(slot.f)}</div></div>
+        <button class="btn small" data-new-date="${dISO}" data-new-formato="${esc(slot.f.split(" + ")[0])}">Pianifica</button></div>`;
+    }).join("")}
+    ${extra.map(c=>{const dt=parseISO(c.dataPub);return `<div class="slot">
+      <span class="day">${GIORNI[dt.getDay()]}<br>${dt.getDate()}</span>
+      <div class="body" data-open="${c.id}"><div class="t">${esc(c.title)}</div>
+      <div class="f">${esc(c.formato)} · ${esc(c.rubrica)} · fuori cadenza</div></div>${statusChip(c)}</div>`}).join("")}
+    </div>`;
+  }
+  $("#main").innerHTML=`
+  <header class="page-head">
+    <span class="eyebrow">Calendario editoriale</span>
+    <h1>Le prossime 8 settimane</h1>
+    <p>La cadenza WorkInProgress: lunedì short teaser, mercoledì short + LinkedIn, venerdì video principale, domenica newsletter.</p>
+  </header>${out}`;
+}
+
+/* ============ VISTA: TEAM AI ============ */
+function renderTeam(){
+  const attivi=S.contents.filter(c=>!isDone(c)).sort((a,b)=>(a.dataPub||"9")<(b.dataPub||"9")?-1:1);
+  $("#main").innerHTML=`
+  <header class="page-head">
+    <span class="eyebrow">Team AI · la tua redazione virtuale</span>
+    <h1>Otto specialisti al tuo servizio</h1>
+    <p>Scegli il contenuto su cui lavorare, poi chiama lo specialista giusto: il brief completo (contesto WorkInProgress + ruolo + dettagli del contenuto) è pronto da incollare in una chat con Claude.</p>
+  </header>
+  <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <label class="eyebrow" style="color:var(--ink3)" for="team-content">Contenuto di lavoro</label>
+    <select id="team-content" style="flex:1;min-width:220px">
+      <option value="">— Nessuno: brief generico sul progetto —</option>
+      ${attivi.map(c=>`<option value="${c.id}" ${S.teamSel===c.id?"selected":""}>${esc(fmtDate(c.dataPub))} · ${esc(c.title)}</option>`).join("")}
+    </select>
+  </div>
+  <div class="team-grid">${ROLES.map(r=>`
+    <div class="agent">
+      <div class="ic">${r.emoji}</div>
+      <h3>${esc(r.name)}</h3>
+      <p>${esc(r.who)}</p>
+      <div class="out">${esc(r.out)}</div>
+      <button class="btn" data-brief="${r.id}">Genera brief</button>
+    </div>`).join("")}
+  </div>`;
+  $("#team-content").addEventListener("change",e=>{S.teamSel=e.target.value;save()});
+}
+function buildBrief(role,c){
+  let s="=== CONTESTO WORKINPROGRESS ===\n"+BASE_CONTEXT+"\n\n=== IL TUO RUOLO ===\n"+role.brief;
+  if(c){
+    s+="\n\n=== CONTENUTO SU CUI LAVORARE ===\n";
+    s+=`Titolo provvisorio: ${c.title}\nRubrica: ${c.rubrica}\nFormato: ${c.formato}\nData di pubblicazione: ${fmtDate(c.dataPub)}${c.dataPub?" ("+c.dataPub+")":""}\nFonti / appunti: ${c.fonti||"da definire"}\nCall-to-action: ${c.cta||"da definire"}\nStato attuale: ${STATUSES[statusIdx(c.status)].label}`;
+    if(c.note)s+=`\nNote: ${c.note}`;
+  }else{
+    s+="\n\n=== CONTENUTO ===\nNessun contenuto specifico selezionato: lavora a livello di progetto o chiedimi il tema.";
+  }
+  s+="\n\nProduci direttamente l'output richiesto dal tuo ruolo.";
+  return s;
+}
+function openBrief(roleId){
+  const role=ROLES.find(r=>r.id===roleId);
+  const c=S.contents.find(x=>x.id===S.teamSel);
+  const text=buildBrief(role,c);
+  openModal(`<h2>${role.emoji} Brief per ${esc(role.name)}</h2>
+    <p class="muted" style="font-size:13px;margin-bottom:10px">${c?"Sul contenuto: <b>"+esc(c.title)+"</b>":"Brief generico sul progetto"}. Copia e incolla in una nuova chat con Claude.</p>
+    <div class="prompt-box" id="brief-text">${esc(text)}</div>
+    <div class="modal-foot">
+      <button class="btn primary" id="copy-brief">Copia brief</button>
+      <div class="right"><button class="btn ghost" data-close>Chiudi</button></div>
+    </div>`);
+  $("#copy-brief").addEventListener("click",async()=>{
+    try{await navigator.clipboard.writeText(text);toast("Brief copiato: incollalo in Claude")}
+    catch(e){
+      const r=document.createRange();r.selectNodeContents($("#brief-text"));
+      const sel=getSelection();sel.removeAllRanges();sel.addRange(r);
+      toast("Seleziona e copia il testo evidenziato");
+    }
+  });
+}
+
+/* ============ VISTA: IDEE ============ */
+function renderIdee(){
+  $("#main").innerHTML=`
+  <header class="page-head">
+    <span class="eyebrow">Banca idee</span>
+    <h1>Niente si perde</h1>
+    <p>Appunta qui ogni spunto. Quando è maturo, promuovilo a contenuto: entrerà in pipeline come Idea.</p>
+  </header>
+  <div class="card"><form id="idea-form" style="display:grid;gap:8px;grid-template-columns:1fr 200px auto">
+    <input name="text" placeholder="Nuovo spunto…" required>
+    <select name="rubrica">${Object.keys(RUBRICHE).map(r=>`<option>${esc(r)}</option>`).join("")}</select>
+    <button class="btn primary" type="submit">Aggiungi</button></form></div>
+  <div class="card">${S.ideas.length?S.ideas.map(i=>`
+    <div class="idea"><div class="tx">${esc(i.text)}<div style="margin-top:4px">${rubricaChip(i.rubrica)}</div></div>
+    <div class="acts"><button class="btn small" data-promote="${i.id}">→ In pipeline</button>
+    <button class="btn small ghost" data-del-idea="${i.id}" style="color:var(--ink3)">Elimina</button></div></div>`).join("")
+    :`<div class="empty-note">La banca idee è vuota. Ogni spunto che ti passa per la testa merita una riga qui.</div>`}</div>`;
+  $("#idea-form").addEventListener("submit",e=>{
+    e.preventDefault();const f=e.target;
+    S.ideas.unshift({id:uid(),text:f.text.value.trim(),rubrica:f.rubrica.value,createdAt:Date.now()});
+    save();render();toast("Idea salvata");
+  });
+}
+
+/* ============ VISTA: DATI ============ */
+function renderDati(){
+  $("#main").innerHTML=`
+  <header class="page-head">
+    <span class="eyebrow">I tuoi dati</span>
+    <h1>Backup e ripristino</h1>
+    <p>Tutto vive nel tuo browser (nessun server). Esporta un backup ogni tanto, e importalo per riprendere da dove eri o passare a un altro dispositivo.</p>
+  </header>
+  <div class="card"><h3>Esporta</h3><p class="muted" style="font-size:13.5px;margin:6px 0 12px">Scarica un file JSON con contenuti, idee e stato di lavorazione.</p>
+    <button class="btn primary" id="exp">Scarica backup</button></div>
+  <div class="card"><h3>Importa</h3><p class="muted" style="font-size:13.5px;margin:6px 0 12px">Carica un backup esportato in precedenza. Sostituisce i dati attuali.</p>
+    <input type="file" id="imp" accept="application/json" style="max-width:340px"></div>
+  <div class="card"><h3>Ripristina esempio</h3><p class="muted" style="font-size:13.5px;margin:6px 0 12px">Riporta il gestionale al calendario editoriale di partenza (luglio 2026). Cancella le modifiche.</p>
+    <button class="btn danger" id="rst">Ripristina dati di esempio</button></div>`;
+  $("#exp").addEventListener("click",()=>{
+    const blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+    a.download="workinprogress-hq-backup-"+todayISO()+".json";a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  });
+  $("#imp").addEventListener("change",e=>{
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=()=>{try{const d=JSON.parse(r.result);
+      if(!d.contents||!d.ideas)throw 0;
+      S=d;save();render();toast("Backup importato");
+    }catch(err){toast("File non valido: serve un backup esportato da qui")}};
+    r.readAsText(f);
+  });
+  $("#rst").addEventListener("click",()=>{
+    if(confirm("Sostituire tutti i dati attuali con quelli di esempio?")){S=seedData();S.view="dati";save();render();toast("Dati di esempio ripristinati")}
+  });
+}
+
+/* ============ EDITOR CONTENUTO ============ */
+function openModal(html){
+  $("#overlay").innerHTML=`<div class="backdrop"><div class="modal" role="dialog" aria-modal="true">${html}</div></div>`;
+  $(".backdrop").addEventListener("click",e=>{if(e.target.classList.contains("backdrop"))closeModal()});
+  document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",closeModal));
+}
+function closeModal(){$("#overlay").innerHTML=""}
+
+function openEditor(id,preset){
+  const isNew=!id;
+  const c=isNew?{id:uid(),title:"",rubrica:"Basi di Lavoro",formato:(preset&&preset.formato)||"Mini-lezione 5′",
+    dataPub:(preset&&preset.date)||"",fonti:"",cta:"",note:"",status:"idea",
+    checklist:WORKFLOW.map(()=>false),createdAt:Date.now()}
+    :S.contents.find(x=>x.id===id);
+  if(!c)return;
+  const done=c.checklist.filter(Boolean).length;
+  openModal(`<h2>${isNew?"Nuovo contenuto":"Modifica contenuto"}</h2>
+  <form id="cform" class="frm">
+    <div class="full"><label for="f-title">Titolo provvisorio</label><input id="f-title" name="title" value="${esc(c.title)}" placeholder="Es. Il periodo di prova spiegato bene" required></div>
+    <div><label for="f-rubrica">Rubrica</label><select id="f-rubrica" name="rubrica">${Object.keys(RUBRICHE).map(r=>`<option ${r===c.rubrica?"selected":""}>${esc(r)}</option>`).join("")}</select></div>
+    <div><label for="f-formato">Formato</label><select id="f-formato" name="formato">${FORMATI.map(f=>`<option ${f===c.formato?"selected":""}>${esc(f)}</option>`).join("")}</select></div>
+    <div><label for="f-data">Data di pubblicazione</label><input id="f-data" type="date" name="dataPub" value="${esc(c.dataPub)}"></div>
+    <div><label for="f-status">Stato</label><select id="f-status" name="status">${STATUSES.map(s=>`<option value="${s.id}" ${s.id===c.status?"selected":""}>${esc(s.label)}</option>`).join("")}</select></div>
+    <div class="full"><label for="f-fonti">Fonti / appunti</label><input id="f-fonti" name="fonti" value="${esc(c.fonti)}" placeholder="Es. DL 62/2026, dati ISTAT, Appunti Alleva"></div>
+    <div class="full"><label for="f-cta">Call-to-action</label><input id="f-cta" name="cta" value="${esc(c.cta)}" placeholder="Es. Guarda il video di venerdì"></div>
+    <div class="full"><label for="f-note">Note</label><textarea id="f-note" name="note" rows="2" placeholder="Angolo, hook, cose da non dimenticare…">${esc(c.note)}</textarea></div>
+  </form>
+  ${isNew?"":`<div style="margin-top:16px"><label class="eyebrow" style="color:var(--ink3)">Flusso di lavoro · ${done}/${WORKFLOW.length}</label>
+    <div class="bar"><i style="width:${Math.round(done/WORKFLOW.length*100)}%"></i></div>
+    ${WORKFLOW.map((w,i)=>`<label class="check ${c.checklist[i]?"on":""}"><input type="checkbox" data-chk="${i}" ${c.checklist[i]?"checked":""}>${esc(w)}</label>`).join("")}</div>`}
+  <div class="modal-foot">
+    ${isNew?"":`<button class="btn danger" id="del-content" type="button">Elimina</button>`}
+    <div class="right">
+      <button class="btn ghost" data-close type="button">Annulla</button>
+      <button class="btn primary" id="save-content" type="button">${isNew?"Crea contenuto":"Salva"}</button>
+    </div>
+  </div>`);
+  if(!isNew){
+    document.querySelectorAll("[data-chk]").forEach(el=>el.addEventListener("change",e=>{
+      c.checklist[Number(e.target.dataset.chk)]=e.target.checked;save();
+      e.target.closest(".check").classList.toggle("on",e.target.checked);
+    }));
+    $("#del-content").addEventListener("click",()=>{
+      if(confirm("Eliminare definitivamente questo contenuto?")){
+        S.contents=S.contents.filter(x=>x.id!==c.id);save();closeModal();render();toast("Contenuto eliminato");
+      }});
+  }
+  $("#save-content").addEventListener("click",()=>{
+    const f=$("#cform");
+    if(!f.title.value.trim()){f.title.focus();return}
+    c.title=f.title.value.trim();c.rubrica=f.rubrica.value;c.formato=f.formato.value;
+    c.dataPub=f.dataPub.value;c.status=f.status.value;c.fonti=f.fonti.value.trim();
+    c.cta=f.cta.value.trim();c.note=f.note.value.trim();
+    if(isNew)S.contents.push(c);
+    save();closeModal();render();toast(isNew?"Contenuto in pipeline":"Salvato");
+  });
+}
+
+/* ============ EVENTI GLOBALI ============ */
+document.addEventListener("click",e=>{
+  const nav=e.target.closest("[data-view]");
+  if(nav){S.view=nav.dataset.view;save();render();return}
+  const open=e.target.closest("[data-open]");
+  if(open){openEditor(open.dataset.open);return}
+  const nu=e.target.closest("[data-new-date]");
+  if(nu){openEditor(null,{date:nu.dataset.newDate,formato:nu.dataset.newFormato});return}
+  const mv=e.target.closest("[data-move]");
+  if(mv){
+    const [id,dir]=mv.dataset.move.split("|");
+    const c=S.contents.find(x=>x.id===id);
+    const i=statusIdx(c.status)+Number(dir);
+    if(i>=0&&i<STATUSES.length){c.status=STATUSES[i].id;save();render()}
+    return;
+  }
+  const br=e.target.closest("[data-brief]");
+  if(br){openBrief(br.dataset.brief);return}
+  const pr=e.target.closest("[data-promote]");
+  if(pr){
+    const i=S.ideas.find(x=>x.id===pr.dataset.promote);
+    if(i){S.ideas=S.ideas.filter(x=>x.id!==i.id);
+      S.contents.push({id:uid(),title:i.text,rubrica:i.rubrica,formato:"Mini-lezione 5′",dataPub:"",
+        fonti:"",cta:"",note:"",status:"idea",checklist:WORKFLOW.map(()=>false),createdAt:Date.now()});
+      save();render();toast("Promossa: la trovi in Pipeline → Idea")}
+    return;
+  }
+  const di=e.target.closest("[data-del-idea]");
+  if(di){S.ideas=S.ideas.filter(x=>x.id!==di.dataset.delIdea);save();render();return}
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
+
+/* ============ RENDER ============ */
+function render(){
+  renderNav();
+  ({oggi:renderOggi,pipeline:renderPipeline,calendario:renderCalendario,
+    team:renderTeam,idee:renderIdee,dati:renderDati}[S.view]||renderOggi)();
+  window.scrollTo(0,0);
+}
+render();
+</script>
+</body>
+</html>
