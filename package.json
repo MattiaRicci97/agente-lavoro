@@ -1,0 +1,19 @@
+{
+  "name": "sillabo",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter @sillabo/api --filter @sillabo/web run dev",
+    "dev:api": "pnpm --filter @sillabo/api run dev",
+    "dev:web": "pnpm --filter @sillabo/web run dev",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "db:push": "pnpm --filter @sillabo/db run push",
+    "db:setup": "pnpm --filter @sillabo/db run setup"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.4",
+    "typescript": "~5.9.3"
+  }
+}
