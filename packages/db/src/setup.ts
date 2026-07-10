@@ -9,7 +9,14 @@
  *     permettono upload e download ai soli utenti autenticati;
  *  3. carica il catalogo dei moduli della super-app (se non gia' presente).
  */
+import { config } from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
+
+// Carica il file .env dalla radice del repo (dove l'utente mette le chiavi).
+const here = path.dirname(fileURLToPath(import.meta.url));
+config({ path: path.resolve(here, "../../../.env") });
 
 const { Client } = pg;
 

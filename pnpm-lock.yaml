@@ -337,6 +337,9 @@ importers:
 
   packages/db:
     dependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@types/pg@8.20.0)(pg@8.22.0)
