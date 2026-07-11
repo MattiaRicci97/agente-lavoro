@@ -1,15 +1,18 @@
-import { useGetDashboardSummary, useListMaterials, useCreateMaterial } from "@sillabo/api-client-react";
+import { useGetDashboardSummary, useListMaterials, useListClasses } from "@sillabo/api-client-react";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Plus, Users, BookOpen, BrainCircuit, Activity } from "lucide-react";
+import { Plus, Users, BookOpen, BrainCircuit, Activity, GraduationCap } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
 
 export default function CattedraDashboard() {
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary();
   const { data: materials, isLoading: materialsLoading } = useListMaterials();
+  const { data: classes, isLoading: classesLoading } = useListClasses();
+
+  const hasNoClasses = !classesLoading && classes?.length === 0;
 
   return (
     <TeacherLayout>
@@ -26,6 +29,23 @@ export default function CattedraDashboard() {
             </Link>
           </Button>
         </div>
+
+        {hasNoClasses && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-primary/30 bg-primary/5 p-5">
+            <div className="flex items-start gap-3">
+              <GraduationCap className="h-5 w-5 text-primary mt-0.5" />
+              <div>
+                <h3 className="font-medium">Inizia da qui: crea il tuo istituto e la prima classe</h3>
+                <p className="text-sm text-muted-foreground">
+                  Ti serve una classe per assegnare i materiali e far entrare gli studenti con un codice.
+                </p>
+              </div>
+            </div>
+            <Button asChild className="shrink-0">
+              <Link href="/cattedra/classi">Crea una classe</Link>
+            </Button>
+          </div>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>

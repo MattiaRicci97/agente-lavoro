@@ -12,6 +12,7 @@ import SignUp from "./pages/SignUp";
 import Onboarding from "./pages/Onboarding";
 import JoinClass from "./pages/JoinClass";
 import CattedraDashboard from "./pages/CattedraDashboard";
+import CattedraClassi from "./pages/CattedraClassi";
 import CattedraNuovo from "./pages/CattedraNuovo";
 import CattedraMaterial from "./pages/CattedraMaterial";
 import CattedraIstituto from "./pages/CattedraIstituto";
@@ -117,6 +118,11 @@ function Router() {
       <Route path="/cattedra">
         <TeacherGate>
           <CattedraDashboard />
+        </TeacherGate>
+      </Route>
+      <Route path="/cattedra/classi">
+        <TeacherGate>
+          <CattedraClassi />
         </TeacherGate>
       </Route>
       <Route path="/cattedra/nuovo">
