@@ -13,6 +13,7 @@ import Onboarding from "./pages/Onboarding";
 import JoinClass from "./pages/JoinClass";
 import CattedraDashboard from "./pages/CattedraDashboard";
 import CattedraClassi from "./pages/CattedraClassi";
+import CattedraProfilo from "./pages/CattedraProfilo";
 import CattedraNuovo from "./pages/CattedraNuovo";
 import CattedraMaterial from "./pages/CattedraMaterial";
 import CattedraIstituto from "./pages/CattedraIstituto";
@@ -23,6 +24,7 @@ import StudioQuiz from "./pages/StudioQuiz";
 import StudioOrale from "./pages/StudioOrale";
 import StudioScritto from "./pages/StudioScritto";
 import StudioRipasso from "./pages/StudioRipasso";
+import StudioProfilo from "./pages/StudioProfilo";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const queryClient = new QueryClient();
@@ -125,6 +127,11 @@ function Router() {
           <CattedraClassi />
         </TeacherGate>
       </Route>
+      <Route path="/cattedra/profilo">
+        <TeacherGate>
+          <CattedraProfilo />
+        </TeacherGate>
+      </Route>
       <Route path="/cattedra/nuovo">
         <TeacherGate>
           <CattedraNuovo />
@@ -159,6 +166,11 @@ function Router() {
       <Route path="/studio/ripasso">
         <StudentGate>
           <StudioRipasso />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/profilo">
+        <StudentGate>
+          <StudioProfilo />
         </StudentGate>
       </Route>
       <Route path="/studio/material/:id/quiz">

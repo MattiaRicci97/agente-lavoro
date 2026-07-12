@@ -10,6 +10,8 @@ export interface AuthUser {
   email: string;
   name: string;
   role: UserRole | null;
+  /** Auto-dichiarazione BES/DSA (profilo studente), letta dai metadati utente. */
+  besDsa: boolean;
 }
 
 declare global {
@@ -50,6 +52,7 @@ async function authenticate(req: Request): Promise<AuthUser | null> {
     email,
     name: metaName || email || "Utente",
     role,
+    besDsa: meta.bes_dsa === true,
   };
   return req.authUser;
 }
