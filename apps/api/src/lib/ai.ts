@@ -297,3 +297,30 @@ export async function nextOralExamTurn(
 
   return extractJson<OralTurnResult>(textBlock.text);
 }
+
+export async function askTeacherAssistant(
+  classSnapshot: string,
+  history: Array<{ role: "user" | "assistant"; content: string }>,
+  question: string,
+): Promise<string> {
+  const message = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 1500,
+    system:
+      "Sei l'assistente didattico di Sillabo per un docente italiano. Rispondi in italiano, in modo concreto e sintetico, " +
+      "basandoti ESCLUSIVAMENTE sui dati della classe forniti qui sotto. Cita nomi di studenti, materiali e argomenti reali quando rilevante. " +
+      "Se i dati non bastano per rispondere, dillo chiaramente e suggerisci cosa far svolgere agli studenti per raccogliere il dato. " +
+      "Concludi, quando ha senso, con un suggerimento didattico azionabile (es. cosa rispiegare nella prossima lezione).\n\n" +
+      `DATI DELLE CLASSI DEL DOCENTE:\n${classSnapshot}`,
+    messages: [
+      ...history.map((m) => ({ role: m.role, content: m.content }) as const),
+      { role: "user" as const, content: question },
+    ],
+  });
+
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("Anthropic non ha restituito testo");
+  }
+  return textBlock.text.trim();
+}

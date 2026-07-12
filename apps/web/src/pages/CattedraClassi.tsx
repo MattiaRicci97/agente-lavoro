@@ -9,8 +9,10 @@ import {
   useListClasses,
   getListClassesQueryKey,
   useCreateClass,
+  useListMaterials,
+  customFetch,
 } from "@sillabo/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -19,7 +21,167 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, GraduationCap, Loader2, Users, Copy, Check, Plus } from "lucide-react";
+import { Building2, GraduationCap, Loader2, Users, Copy, Check, Plus, CalendarDays, Trash2 } from "lucide-react";
+
+interface ExamDateRow {
+  id: number;
+  classId: number;
+  materialId: number | null;
+  title: string;
+  subject: string;
+  examDate: string;
+  className: string;
+}
+
+function ExamCalendarSection() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: classes } = useListClasses();
+  const { data: materials } = useListMaterials();
+
+  const { data: exams } = useQuery({
+    queryKey: ["examDates"],
+    queryFn: () => customFetch<ExamDateRow[]>("/api/exam-dates", { responseType: "json" }),
+  });
+
+  const [classId, setClassId] = useState("");
+  const [title, setTitle] = useState("");
+  const [subject, setSubject] = useState("");
+  const [materialId, setMaterialId] = useState("__nessuno__");
+  const [examDate, setExamDate] = useState("");
+
+  const createExam = useMutation({
+    mutationFn: () =>
+      customFetch<ExamDateRow>("/api/exam-dates", {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify({
+          classId: Number(classId),
+          title: title.trim(),
+          subject: subject.trim(),
+          materialId: materialId === "__nessuno__" ? null : Number(materialId),
+          examDate,
+        }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Verifica programmata", description: "Gli studenti la vedranno nel loro piano di ripasso." });
+      queryClient.invalidateQueries({ queryKey: ["examDates"] });
+      setTitle("");
+      setExamDate("");
+    },
+    onError: (err: any) => {
+      toast({ title: "Errore", description: err?.data?.error ?? "Impossibile salvare la verifica.", variant: "destructive" });
+    },
+  });
+
+  const deleteExam = useMutation({
+    mutationFn: (id: number) => customFetch<void>(`/api/exam-dates/${id}`, { method: "DELETE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["examDates"] }),
+  });
+
+  const canSubmit = classId && title.trim() && subject.trim() && examDate;
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = (exams ?? []).filter((e) => e.examDate >= today);
+
+  return (
+    <div className="space-y-6">
+      <Card className="max-w-3xl">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-primary" />
+            <CardTitle>Calendario verifiche</CardTitle>
+          </div>
+          <CardDescription>
+            Fissa una verifica: gli studenti la vedranno in Studio e potranno generare il piano di ripasso a ritroso dalla data
+            (se colleghi un materiale).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <FormLabelPlain>Classe</FormLabelPlain>
+              <Select value={classId} onValueChange={setClassId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona la classe" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(classes ?? []).map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name} — {c.gradeLevel}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <FormLabelPlain>Data</FormLabelPlain>
+              <Input type="date" min={today} value={examDate} onChange={(e) => setExamDate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <FormLabelPlain>Titolo</FormLabelPlain>
+              <Input placeholder="es. Verifica sul Romanticismo" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <FormLabelPlain>Materia</FormLabelPlain>
+              <Input placeholder="es. Italiano" value={subject} onChange={(e) => setSubject(e.target.value)} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <FormLabelPlain>Materiale collegato (per il piano di ripasso)</FormLabelPlain>
+              <Select value={materialId} onValueChange={setMaterialId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__nessuno__">Nessun materiale</SelectItem>
+                  {(materials ?? []).map((m) => (
+                    <SelectItem key={m.id} value={String(m.id)}>
+                      {m.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <Button onClick={() => createExam.mutate()} disabled={!canSubmit || createExam.isPending}>
+            {createExam.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+            Programma verifica
+          </Button>
+        </CardContent>
+      </Card>
+
+      {upcoming.length > 0 && (
+        <div className="space-y-3 max-w-3xl">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">In programma</h3>
+          {upcoming.map((exam) => (
+            <div key={exam.id} className="flex items-center justify-between gap-3 rounded-lg border bg-card p-4">
+              <div>
+                <div className="font-medium">{exam.title}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {exam.className} • {exam.subject} •{" "}
+                  {new Date(exam.examDate).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-destructive shrink-0"
+                onClick={() => deleteExam.mutate(exam.id)}
+                disabled={deleteExam.isPending}
+                title="Elimina"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FormLabelPlain({ children }: { children: React.ReactNode }) {
+  return <div className="text-sm font-medium leading-none">{children}</div>;
+}
 
 const GRADE_LEVELS = [
   "1ª Media",
@@ -316,6 +478,7 @@ export default function CattedraClassi() {
               <span>· {institution.city}</span>
             </div>
             <ClassesSection institutionId={institution.id} />
+            <ExamCalendarSection />
           </>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { BarChart3, LogOut, Building2, LayoutGrid, Inbox, GraduationCap, UserCircle } from "lucide-react";
+import { BarChart3, LogOut, Building2, LayoutGrid, Inbox, GraduationCap, UserCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/lib/auth";
@@ -40,6 +40,12 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
             <Button variant={location === "/cattedra/istituto" ? "secondary" : "ghost"} className="w-full justify-start">
               <Building2 className="mr-2 h-4 w-4" />
               Istituto
+            </Button>
+          </Link>
+          <Link href="/cattedra/assistente">
+            <Button variant={location === "/cattedra/assistente" ? "secondary" : "ghost"} className="w-full justify-start">
+              <Sparkles className="mr-2 h-4 w-4" />
+              Assistente
             </Button>
           </Link>
           <Link href="/cattedra/moduli">

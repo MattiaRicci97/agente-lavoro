@@ -21,6 +21,8 @@ export const quizAttemptsTable = pgTable("quiz_attempts", {
   score: integer("score").notNull(),
   total: integer("total").notNull(),
   gradedAnswers: jsonb("graded_answers").$type<GradedAnswerRecord[]>().notNull(),
+  /** Durata della sessione in secondi (misurata dal client). */
+  durationSeconds: integer("duration_seconds"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

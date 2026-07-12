@@ -14,6 +14,7 @@ import JoinClass from "./pages/JoinClass";
 import CattedraDashboard from "./pages/CattedraDashboard";
 import CattedraClassi from "./pages/CattedraClassi";
 import CattedraProfilo from "./pages/CattedraProfilo";
+import CattedraAssistente from "./pages/CattedraAssistente";
 import CattedraNuovo from "./pages/CattedraNuovo";
 import CattedraMaterial from "./pages/CattedraMaterial";
 import CattedraIstituto from "./pages/CattedraIstituto";
@@ -25,6 +26,9 @@ import StudioOrale from "./pages/StudioOrale";
 import StudioScritto from "./pages/StudioScritto";
 import StudioRipasso from "./pages/StudioRipasso";
 import StudioProfilo from "./pages/StudioProfilo";
+import StudioLampo from "./pages/StudioLampo";
+import StudioFinEd from "./pages/StudioFinEd";
+import StudioFinEdLesson from "./pages/StudioFinEdLesson";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const queryClient = new QueryClient();
@@ -132,6 +136,11 @@ function Router() {
           <CattedraProfilo />
         </TeacherGate>
       </Route>
+      <Route path="/cattedra/assistente">
+        <TeacherGate>
+          <CattedraAssistente />
+        </TeacherGate>
+      </Route>
       <Route path="/cattedra/nuovo">
         <TeacherGate>
           <CattedraNuovo />
@@ -171,6 +180,21 @@ function Router() {
       <Route path="/studio/profilo">
         <StudentGate>
           <StudioProfilo />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/lampo">
+        <StudentGate>
+          <StudioLampo />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/finanza">
+        <StudentGate>
+          <StudioFinEd />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/finanza/:id">
+        <StudentGate>
+          <StudioFinEdLesson />
         </StudentGate>
       </Route>
       <Route path="/studio/material/:id/quiz">

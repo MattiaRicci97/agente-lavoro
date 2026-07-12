@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LogOut, BookMarked, CalendarClock, UserCircle } from "lucide-react";
+import { LogOut, BookMarked, CalendarClock, UserCircle, PiggyBank } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/lib/auth";
@@ -30,6 +30,12 @@ export function StudentLayout({ children }: { children: React.ReactNode }) {
               <Button variant={location === "/studio/ripasso" ? "secondary" : "ghost"}>
                 <CalendarClock className="mr-2 h-4 w-4" />
                 Piano di ripasso
+              </Button>
+            </Link>
+            <Link href="/studio/finanza">
+              <Button variant={location.startsWith("/studio/finanza") ? "secondary" : "ghost"}>
+                <PiggyBank className="mr-2 h-4 w-4" />
+                Finanza
               </Button>
             </Link>
             <Link href="/studio/profilo">

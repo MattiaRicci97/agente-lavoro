@@ -12,6 +12,9 @@ import institutionsRouter from "./institutions";
 import classesRouter from "./classes";
 import writtenExamsRouter from "./writtenExams";
 import reviewItemsRouter from "./reviewItems";
+import examDatesRouter from "./examDates";
+import moduleLearningRouter from "./moduleLearning";
+import assistantRouter from "./assistant";
 
 const router: IRouter = Router();
 
@@ -28,5 +31,8 @@ router.use(institutionsRouter);
 router.use(classesRouter);
 router.use(writtenExamsRouter);
 router.use(reviewItemsRouter);
+router.use(examDatesRouter);
+router.use(moduleLearningRouter);
+router.use(assistantRouter);
 
 export default router;

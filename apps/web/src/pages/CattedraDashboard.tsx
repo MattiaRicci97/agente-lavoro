@@ -5,8 +5,9 @@ import {
   useDeleteMaterial,
   getListMaterialsQueryKey,
   getGetDashboardSummaryQueryKey,
+  customFetch,
 } from "@sillabo/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,79 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
-import { Plus, Users, BookOpen, BrainCircuit, Activity, GraduationCap, Trash2, Loader2 } from "lucide-react";
+import { Plus, Users, BookOpen, BrainCircuit, Activity, GraduationCap, Trash2, Loader2, AlertTriangle, Clock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+
+interface AlertStudent {
+  id: number;
+  name: string;
+  className: string;
+  besDsa: boolean;
+  accuracyPercent: number | null;
+  lastActivityAt: string | null;
+  studyMinutes: number;
+  attemptsCount: number;
+  oralsCount: number;
+  atRisk: boolean;
+  reasons: string[];
+}
+
+function StudentAlertsCard() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["teacherAlerts"],
+    queryFn: () => customFetch<{ students: AlertStudent[] }>("/api/teacher/alerts", { responseType: "json" }),
+  });
+
+  const students = data?.students ?? [];
+  const atRisk = students.filter((s) => s.atRisk);
+  if (isLoading || students.length === 0) return null;
+
+  return (
+    <Card className={atRisk.length ? "border-amber-300/60" : ""}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          {atRisk.length ? (
+            <>
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              Studenti da attenzionare ({atRisk.length})
+            </>
+          ) : (
+            <>
+              <Users className="h-4 w-4 text-muted-foreground" />
+              Tutti gli studenti sono in carreggiata 🎉
+            </>
+          )}
+        </CardTitle>
+        <CardDescription>
+          Segnaliamo chi non si esercita da oltre 7 giorni o ha un'accuratezza sotto il 50%.
+        </CardDescription>
+      </CardHeader>
+      {atRisk.length > 0 && (
+        <CardContent className="space-y-2.5">
+          {atRisk.slice(0, 6).map((s) => (
+            <div key={s.id} className="flex items-center justify-between gap-3 rounded-md border bg-card px-4 py-2.5">
+              <div className="min-w-0">
+                <div className="font-medium truncate">
+                  {s.name} <span className="text-xs text-muted-foreground font-normal">· {s.className}</span>
+                </div>
+                <div className="text-xs text-amber-700 mt-0.5">{s.reasons.join(" · ")}</div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 text-xs text-muted-foreground">
+                {s.studyMinutes > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {s.studyMinutes} min
+                  </span>
+                )}
+                {s.accuracyPercent !== null && <Badge variant="outline">{s.accuracyPercent}%</Badge>}
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
 import { Skeleton } from "@/components/ui/skeleton";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
 import { useToast } from "@/hooks/use-toast";
@@ -175,6 +248,8 @@ export default function CattedraDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        <StudentAlertsCard />
 
         <div className="space-y-4">
           <h2 className="text-xl font-semibold tracking-tight">I suoi materiali</h2>

@@ -1,11 +1,14 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, sql, desc, inArray } from "drizzle-orm";
 import {
   db,
   materialsTable,
   questionsTable,
   quizAttemptsTable,
   oralSessionsTable,
+  classesTable,
+  studentsTable,
+  materialClassesTable,
 } from "@sillabo/db";
 import type { GradedAnswerRecord } from "@sillabo/db";
 import {
@@ -17,6 +20,84 @@ import { attachClassIds } from "../lib/materialClasses";
 import { requireTeacher } from "../middlewares/auth";
 
 const router: IRouter = Router();
+
+/**
+ * Studenti da attenzionare per il docente: mai attivi, inattivi da 7+ giorni
+ * o con accuratezza media sotto il 50%. Include il tempo di studio misurato.
+ */
+router.get("/teacher/alerts", requireTeacher, async (req, res): Promise<void> => {
+  const classes = await db
+    .select({ id: classesTable.id, name: classesTable.name })
+    .from(classesTable)
+    .where(eq(classesTable.teacherId, req.teacher!.id));
+
+  if (!classes.length) {
+    res.json({ students: [] });
+    return;
+  }
+  const classNames = new Map(classes.map((c) => [c.id, c.name]));
+
+  const roster = await db
+    .select()
+    .from(studentsTable)
+    .where(inArray(studentsTable.classId, classes.map((c) => c.id)));
+
+  const links = await db
+    .select({ materialId: materialClassesTable.materialId })
+    .from(materialClassesTable)
+    .where(inArray(materialClassesTable.classId, classes.map((c) => c.id)));
+  const materialIds = Array.from(new Set(links.map((l) => l.materialId)));
+
+  const attempts = materialIds.length
+    ? await db.select().from(quizAttemptsTable).where(inArray(quizAttemptsTable.materialId, materialIds))
+    : [];
+  const orals = materialIds.length
+    ? await db.select().from(oralSessionsTable).where(inArray(oralSessionsTable.materialId, materialIds))
+    : [];
+
+  const now = Date.now();
+  const WEEK = 7 * 24 * 60 * 60 * 1000;
+
+  const students = roster.map((s) => {
+    const myAttempts = attempts.filter((a) => a.studentName === s.name);
+    const myOrals = orals.filter((o) => o.studentName === s.name);
+
+    const correct = myAttempts.reduce((sum, a) => sum + a.score, 0);
+    const total = myAttempts.reduce((sum, a) => sum + a.total, 0);
+    const accuracyPercent = total > 0 ? Math.round((correct / total) * 100) : null;
+
+    const lastTimes = [
+      ...myAttempts.map((a) => new Date(a.createdAt).getTime()),
+      ...myOrals.map((o) => new Date(o.createdAt).getTime()),
+    ];
+    const lastActivityAt = lastTimes.length ? new Date(Math.max(...lastTimes)).toISOString() : null;
+
+    const studyMinutes = Math.round(myAttempts.reduce((sum, a) => sum + (a.durationSeconds ?? 0), 0) / 60);
+
+    const reasons: string[] = [];
+    if (!lastActivityAt) reasons.push("mai attivo");
+    else if (now - new Date(lastActivityAt).getTime() > WEEK) reasons.push("inattivo da oltre 7 giorni");
+    if (accuracyPercent !== null && accuracyPercent < 50) reasons.push(`accuratezza ${accuracyPercent}%`);
+
+    return {
+      id: s.id,
+      name: s.name,
+      className: classNames.get(s.classId) ?? "",
+      besDsa: s.besDsa,
+      accuracyPercent,
+      lastActivityAt,
+      studyMinutes,
+      attemptsCount: myAttempts.length,
+      oralsCount: myOrals.length,
+      atRisk: reasons.length > 0,
+      reasons,
+    };
+  });
+
+  students.sort((a, b) => Number(b.atRisk) - Number(a.atRisk) || (a.accuracyPercent ?? 101) - (b.accuracyPercent ?? 101));
+
+  res.json({ students });
+});
 
 router.get("/materials/:id/analytics", requireTeacher, async (req, res): Promise<void> => {
   const params = GetMaterialAnalyticsParams.safeParse(req.params);

@@ -10,7 +10,8 @@ import {
   SimplifyMaterialParams,
   SimplifyMaterialResponse,
 } from "@sillabo/api-zod";
-import { classifyCurriculumTopic, generateSimplifiedContent } from "../lib/ai";
+import { classifyCurriculumTopic, generateSimplifiedContent, generateWrittenExamPrompt } from "../lib/ai";
+import { z } from "zod/v4";
 import { attachClassIds } from "../lib/materialClasses";
 import {
   extractTextFromUploadedFile,
@@ -34,6 +35,49 @@ const materialColumns = {
   simplifiedContent: materialsTable.simplifiedContent,
   createdAt: materialsTable.createdAt,
 };
+
+/**
+ * Genera una verifica stampabile (solo testo) dal materiale, per l'uso in
+ * classe su carta. Non salva nulla: il docente la stampa o la salva in PDF.
+ */
+router.post("/materials/:id/printable-exam", requireTeacher, async (req, res): Promise<void> => {
+  const materialId = Number(req.params.id);
+  if (!Number.isInteger(materialId)) {
+    res.status(400).json({ error: "id non valido" });
+    return;
+  }
+  const parsed = z.object({ examType: z.enum(["tema", "versione", "problema"]) }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [material] = await db.select().from(materialsTable).where(eq(materialsTable.id, materialId));
+  if (!material) {
+    res.status(404).json({ error: "Materiale non trovato" });
+    return;
+  }
+
+  try {
+    const { prompt } = await generateWrittenExamPrompt(
+      parsed.data.examType,
+      material.title,
+      material.subject,
+      material.gradeLevel,
+      material.content,
+    );
+    res.json({
+      prompt,
+      title: material.title,
+      subject: material.subject,
+      gradeLevel: material.gradeLevel,
+      examType: parsed.data.examType,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Printable exam generation failed");
+    res.status(500).json({ error: "Impossibile generare la verifica. Riprova." });
+  }
+});
 
 router.get("/materials", requireAuth, async (_req, res): Promise<void> => {
   const rows = await db

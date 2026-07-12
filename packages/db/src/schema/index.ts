@@ -11,3 +11,5 @@ export * from "./oralMessages";
 export * from "./writtenExams";
 export * from "./reviewItems";
 export * from "./modules";
+export * from "./examDates";
+export * from "./moduleLearning";

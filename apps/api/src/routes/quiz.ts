@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, inArray, desc } from "drizzle-orm";
+import { eq, inArray, desc, and } from "drizzle-orm";
+import { z } from "zod/v4";
 import { db, materialsTable, questionsTable, quizAttemptsTable, reviewItemsTable } from "@sillabo/db";
 import type { GradedAnswerRecord } from "@sillabo/db";
 import {
@@ -28,6 +29,107 @@ router.get("/materials/:id/quiz-attempts", requireAuth, async (req, res): Promis
     .orderBy(desc(quizAttemptsTable.createdAt));
 
   res.json(ListQuizAttemptsResponse.parse(rows));
+});
+
+/**
+ * Set di domande adattivo per lo studente autenticato: privilegia gli
+ * argomenti dove ha sbagliato di piu' e calibra la difficolta' sul suo
+ * rendimento complessivo passato su questo materiale.
+ */
+router.get("/materials/:id/quiz-set", requireAuth, async (req, res): Promise<void> => {
+  const materialId = Number(req.params.id);
+  if (!Number.isInteger(materialId)) {
+    res.status(400).json({ error: "id non valido" });
+    return;
+  }
+
+  const student = await findApprovedStudentForMaterial(req.authUserId!, materialId);
+  if (!student) {
+    res.status(403).json({ error: "Non sei iscritto a una classe con accesso a questo materiale" });
+    return;
+  }
+
+  const allQuestions = await db
+    .select()
+    .from(questionsTable)
+    .where(eq(questionsTable.materialId, materialId));
+
+  if (!allQuestions.length) {
+    res.json({ questions: [], focusTopics: [], level: "medio" });
+    return;
+  }
+
+  const pastAttempts = await db
+    .select()
+    .from(quizAttemptsTable)
+    .where(and(eq(quizAttemptsTable.materialId, materialId), eq(quizAttemptsTable.studentName, student.name)))
+    .orderBy(desc(quizAttemptsTable.createdAt))
+    .limit(10);
+
+  // Accuratezza complessiva e per argomento sulle prove passate.
+  const topicStats = new Map<string, { correct: number; total: number }>();
+  let correct = 0;
+  let total = 0;
+  for (const attempt of pastAttempts) {
+    for (const g of attempt.gradedAnswers as GradedAnswerRecord[]) {
+      total += 1;
+      if (g.correct) correct += 1;
+      if (g.topic) {
+        const s = topicStats.get(g.topic) ?? { correct: 0, total: 0 };
+        s.total += 1;
+        if (g.correct) s.correct += 1;
+        topicStats.set(g.topic, s);
+      }
+    }
+  }
+  const accuracy = total > 0 ? correct / total : null;
+
+  // Livello: prima volta -> mix; <50% -> consolidare; >80% -> sfida.
+  const level: "facile" | "medio" | "difficile" =
+    accuracy === null ? "medio" : accuracy < 0.5 ? "facile" : accuracy > 0.8 ? "difficile" : "medio";
+
+  const weakTopics = Array.from(topicStats.entries())
+    .filter(([, s]) => s.total > 0 && s.correct / s.total < 0.6)
+    .sort((a, b) => a[1].correct / a[1].total - b[1].correct / b[1].total)
+    .map(([topic]) => topic);
+
+  const allowedDifficulties: string[] =
+    level === "facile" ? ["facile", "medio"] : level === "difficile" ? ["medio", "difficile"] : ["facile", "medio", "difficile"];
+
+  const TARGET = 8;
+  const picked: typeof allQuestions = [];
+  const pickedIds = new Set<number>();
+
+  // 1. Priorita' agli argomenti deboli (fino a meta' del set).
+  for (const topic of weakTopics) {
+    for (const q of allQuestions) {
+      if (picked.length >= Math.ceil(TARGET / 2)) break;
+      if (q.topic === topic && !pickedIds.has(q.id) && allowedDifficulties.includes(q.difficulty)) {
+        picked.push(q);
+        pickedIds.add(q.id);
+      }
+    }
+  }
+
+  // 2. Riempi con domande alla difficolta' giusta, poi con qualsiasi altra.
+  for (const pool of [
+    allQuestions.filter((q) => allowedDifficulties.includes(q.difficulty)),
+    allQuestions,
+  ]) {
+    for (const q of pool) {
+      if (picked.length >= TARGET) break;
+      if (!pickedIds.has(q.id)) {
+        picked.push(q);
+        pickedIds.add(q.id);
+      }
+    }
+  }
+
+  res.json({
+    questions: picked.map((q) => ({ id: q.id, question: q.question, topic: q.topic, difficulty: q.difficulty })),
+    focusTopics: weakTopics.slice(0, 3),
+    level,
+  });
 });
 
 router.post("/materials/:id/quiz-attempts", requireAuth, async (req, res): Promise<void> => {
@@ -97,6 +199,12 @@ router.post("/materials/:id/quiz-attempts", requireAuth, async (req, res): Promi
 
   const score = gradedAnswers.filter((a) => a.correct).length;
 
+  // Durata sessione (facoltativa: non fa parte dello schema generato).
+  const durationParse = z
+    .object({ durationSeconds: z.number().int().positive().max(4 * 3600).optional() })
+    .safeParse(req.body);
+  const durationSeconds = durationParse.success ? (durationParse.data.durationSeconds ?? null) : null;
+
   const [attempt] = await db
     .insert(quizAttemptsTable)
     .values({
@@ -105,6 +213,7 @@ router.post("/materials/:id/quiz-attempts", requireAuth, async (req, res): Promi
       score,
       total: gradedAnswers.length,
       gradedAnswers,
+      durationSeconds,
     })
     .returning();
 

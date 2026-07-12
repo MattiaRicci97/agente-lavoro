@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useParams } from "wouter";
-import { 
-  useGetMaterial, 
+import {
+  useGetMaterial,
   getGetMaterialQueryKey,
   useGetMaterialAnalytics,
   useGenerateQuestions,
@@ -11,14 +12,15 @@ import {
   getListWrittenExamsQueryKey,
   useGenerateWrittenExam,
   useSimplifyMaterial,
+  customFetch,
 } from "@sillabo/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
-import { ArrowLeft, BrainCircuit, AlertTriangle, CheckCircle2, XCircle, Loader2, FileText, HeartHandshake } from "lucide-react";
+import { ArrowLeft, BrainCircuit, AlertTriangle, CheckCircle2, XCircle, Loader2, FileText, HeartHandshake, Printer, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
@@ -28,6 +30,51 @@ const examTypeLabels: Record<string, string> = {
   versione: "Versione",
   problema: "Problema",
 };
+
+interface PrintableExam {
+  prompt: string;
+  title: string;
+  subject: string;
+  gradeLevel: string;
+  examType: string;
+}
+
+/**
+ * Vista stampabile a schermo intero: il docente usa "Stampa" del browser
+ * per portarla su carta o salvarla come PDF.
+ */
+function PrintableExamView({ exam, onClose }: { exam: PrintableExam; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-white text-black overflow-y-auto">
+      <div className="max-w-3xl mx-auto p-8 print:p-0">
+        <div className="flex justify-between items-center mb-6 print:hidden">
+          <Button onClick={() => window.print()}>
+            <Printer className="mr-2 h-4 w-4" />
+            Stampa / Salva PDF
+          </Button>
+          <Button variant="ghost" onClick={onClose}>
+            <X className="mr-2 h-4 w-4" />
+            Chiudi
+          </Button>
+        </div>
+
+        <div className="space-y-6">
+          <div className="border-b-2 border-black pb-4 space-y-1">
+            <div className="text-sm uppercase tracking-widest">{examTypeLabels[exam.examType] ?? exam.examType} — {exam.subject}</div>
+            <h1 className="text-2xl font-bold">{exam.title}</h1>
+            <div className="text-sm">{exam.gradeLevel}</div>
+            <div className="flex gap-12 pt-4 text-sm">
+              <span>Nome e cognome: ______________________________</span>
+              <span>Data: ______________</span>
+            </div>
+          </div>
+          <div className="whitespace-pre-wrap leading-relaxed text-[15px]">{exam.prompt}</div>
+          <div className="pt-8 text-xs text-neutral-500 print:text-neutral-500">Generata con Sillabo — il sistema operativo della didattica</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function CattedraMaterial() {
   const { id } = useParams();
@@ -55,6 +102,19 @@ export default function CattedraMaterial() {
 
   const generateWrittenExam = useGenerateWrittenExam();
   const simplifyMaterial = useSimplifyMaterial();
+
+  const [printableExam, setPrintableExam] = useState<PrintableExam | null>(null);
+  const generatePrintable = useMutation({
+    mutationFn: (examType: "tema" | "versione" | "problema") =>
+      customFetch<PrintableExam>(`/api/materials/${materialId}/printable-exam`, {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify({ examType }),
+      }),
+    onSuccess: (data) => setPrintableExam(data),
+    onError: (err: any) =>
+      toast({ title: "Errore", description: err?.data?.error ?? "Impossibile generare la verifica.", variant: "destructive" }),
+  });
 
   const handleGenerateQuestions = () => {
     generateQuestions.mutate({ id: materialId }, {
@@ -278,6 +338,25 @@ export default function CattedraMaterial() {
                     </Button>
                   ))}
                 </div>
+                <div className="rounded-md border border-dashed p-3 space-y-2">
+                  <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Printer className="h-3.5 w-3.5" />
+                    Versione cartacea: genera e stampa (o salva in PDF) per usarla in classe.
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["tema", "versione", "problema"] as const).map((type) => (
+                      <Button
+                        key={type}
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => generatePrintable.mutate(type)}
+                        disabled={generatePrintable.isPending}
+                      >
+                        {generatePrintable.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : examTypeLabels[type]}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
                 {writtenExamsLoading ? <Skeleton className="h-16" /> : !writtenExams?.length ? (
                   <div className="text-sm text-muted-foreground">Nessuna verifica generata.</div>
                 ) : (
@@ -332,6 +411,7 @@ export default function CattedraMaterial() {
           </div>
         </div>
       </div>
+      {printableExam && <PrintableExamView exam={printableExam} onClose={() => setPrintableExam(null)} />}
     </TeacherLayout>
   );
 }
