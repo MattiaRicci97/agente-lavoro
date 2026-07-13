@@ -100,6 +100,36 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
 import { useToast } from "@/hooks/use-toast";
 
+function StatCard({
+  label,
+  icon: Icon,
+  value,
+  loading,
+}: {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  value: number | string;
+  loading: boolean;
+}) {
+  return (
+    <Card className="transition-shadow hover:shadow-md">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/8 text-primary">
+          <Icon className="h-4 w-4" />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <Skeleton className="h-8 w-16" />
+        ) : (
+          <div className="font-display text-3xl font-semibold text-primary">{value}</div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function DeleteMaterialButton({ id, title }: { id: number; title: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -174,7 +204,7 @@ export default function CattedraDashboard() {
       <div className="p-8 max-w-6xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Buongiorno, Prof.</h1>
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">Buongiorno, Prof.</h1>
             <p className="text-muted-foreground mt-1">Ecco l'andamento delle sue classi oggi.</p>
           </div>
           <Button asChild>
@@ -203,56 +233,16 @@ export default function CattedraDashboard() {
         )}
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Materiali Caricati</CardTitle>
-              <BookOpen className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {summaryLoading ? <Skeleton className="h-8 w-16" /> : (
-                <div className="text-2xl font-bold">{summary?.materialsCount || 0}</div>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Domande Generate</CardTitle>
-              <BrainCircuit className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {summaryLoading ? <Skeleton className="h-8 w-16" /> : (
-                <div className="text-2xl font-bold">{summary?.totalQuestions || 0}</div>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Esercitazioni</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {summaryLoading ? <Skeleton className="h-8 w-16" /> : (
-                <div className="text-2xl font-bold">{summary?.totalQuizAttempts || 0}</div>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Media Classe</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {summaryLoading ? <Skeleton className="h-8 w-16" /> : (
-                <div className="text-2xl font-bold">{summary?.averageQuizScorePercent || 0}%</div>
-              )}
-            </CardContent>
-          </Card>
+          <StatCard label="Materiali Caricati" icon={BookOpen} loading={summaryLoading} value={summary?.materialsCount || 0} />
+          <StatCard label="Domande Generate" icon={BrainCircuit} loading={summaryLoading} value={summary?.totalQuestions || 0} />
+          <StatCard label="Esercitazioni" icon={Activity} loading={summaryLoading} value={summary?.totalQuizAttempts || 0} />
+          <StatCard label="Media Classe" icon={Users} loading={summaryLoading} value={`${summary?.averageQuizScorePercent || 0}%`} />
         </div>
 
         <StudentAlertsCard />
 
         <div className="space-y-4">
-          <h2 className="text-xl font-semibold tracking-tight">I suoi materiali</h2>
+          <h2 className="font-display text-2xl font-semibold tracking-tight text-primary">I suoi materiali</h2>
           {materialsLoading ? (
             <div className="space-y-4">
               <Skeleton className="h-24 w-full" />
@@ -270,10 +260,10 @@ export default function CattedraDashboard() {
           ) : (
             <div className="grid gap-4">
               {materials?.map(material => (
-                <Card key={material.id} className="hover:border-primary/50 transition-colors">
+                <Card key={material.id} className="transition-shadow hover:shadow-md hover:border-primary/30">
                   <CardContent className="p-6 flex items-center justify-between">
                     <div className="space-y-1.5">
-                      <h3 className="font-semibold text-lg">{material.title}</h3>
+                      <h3 className="font-display font-semibold text-lg">{material.title}</h3>
                       <p className="text-sm text-muted-foreground">{material.subject} • {material.gradeLevel}</p>
                       <CurriculumBadge topic={material.curriculumTopic} subtopic={material.curriculumSubtopic} />
                     </div>

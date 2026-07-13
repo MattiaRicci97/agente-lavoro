@@ -13,9 +13,13 @@ export default function StudioDashboard() {
   return (
     <StudentLayout>
       <div className="max-w-4xl mx-auto space-y-8">
-        <div className="text-center space-y-4 mb-12">
-          <h1 className="text-4xl font-bold tracking-tight text-secondary">Cosa studiamo oggi?</h1>
-          <p className="text-muted-foreground text-lg">Scegli un argomento e mettiti alla prova con quiz e simulazioni.</p>
+        <div className="text-center space-y-3 mb-10">
+          <h1 className="font-display text-4xl font-semibold tracking-tight text-secondary sm:text-5xl">
+            Cosa studiamo oggi?
+          </h1>
+          <p className="text-muted-foreground text-lg text-balance max-w-lg mx-auto">
+            Scegli un argomento e mettiti alla prova con quiz e simulazioni.
+          </p>
         </div>
 
         {isLoading ? (
@@ -32,12 +36,13 @@ export default function StudioDashboard() {
         ) : (
           <div className="grid gap-6 md:grid-cols-2">
             {materials?.map(material => (
-              <Card key={material.id} className="flex flex-col overflow-hidden hover:shadow-md transition-all border-secondary/20">
-                <CardHeader className="bg-secondary/5 pb-4 border-b border-secondary/10">
+              <Card key={material.id} className="flex flex-col overflow-hidden hover:shadow-md transition-shadow border-secondary/15">
+                <CardHeader className="relative bg-secondary/5 pb-4 border-b border-secondary/10">
+                  <div className="absolute left-0 top-0 h-full w-1 bg-secondary/40" />
                   <div className="flex justify-between items-start">
                     <div className="space-y-1">
                       <span className="text-xs font-semibold uppercase tracking-wider text-secondary">{material.subject}</span>
-                      <CardTitle className="text-xl">{material.title}</CardTitle>
+                      <CardTitle className="font-display text-xl">{material.title}</CardTitle>
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">{material.gradeLevel}</p>

@@ -42,8 +42,8 @@ export default function Onboarding() {
       <div className="max-w-2xl w-full text-center space-y-8">
         <div className="space-y-4">
           <Logo className="text-primary justify-center" size="xl" />
-          <h1 className="text-2xl font-semibold">Come vuoi usare Sillabo?</h1>
-          <p className="text-muted-foreground">Scegli il tuo ruolo per continuare. Questa scelta non potrà essere cambiata in seguito.</p>
+          <h1 className="font-display text-3xl font-semibold text-primary">Come vuoi usare Sillabo?</h1>
+          <p className="text-muted-foreground text-balance">Scegli il tuo ruolo per continuare. Questa scelta non potrà essere cambiata in seguito.</p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
@@ -51,16 +51,16 @@ export default function Onboarding() {
             type="button"
             onClick={() => choose("docente")}
             disabled={setRole.isPending}
-            className="p-8 bg-card rounded-xl border shadow-sm transition-all hover:shadow-md hover:border-primary flex flex-col items-center text-center space-y-4 disabled:opacity-60"
+            className="group p-8 bg-card rounded-2xl border border-card-border shadow-sm transition-all hover:shadow-md hover:border-primary/40 hover:-translate-y-0.5 flex flex-col items-center text-center space-y-4 disabled:opacity-60"
           >
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-primary">
+            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center text-primary transition-transform group-hover:scale-105">
               {setRole.isPending && selected === "docente" ? (
                 <Loader2 className="w-8 h-8 animate-spin" />
               ) : (
                 <BookOpen className="w-8 h-8" />
               )}
             </div>
-            <h2 className="text-xl font-semibold">Sono un docente</h2>
+            <h2 className="font-display text-xl font-semibold text-primary">Sono un docente</h2>
             <p className="text-muted-foreground text-sm">Carica materiali, gestisci le classi e approva le richieste degli studenti.</p>
           </button>
 
@@ -68,16 +68,16 @@ export default function Onboarding() {
             type="button"
             onClick={() => choose("studente")}
             disabled={setRole.isPending}
-            className="p-8 bg-card rounded-xl border shadow-sm transition-all hover:shadow-md hover:border-secondary flex flex-col items-center text-center space-y-4 disabled:opacity-60"
+            className="group p-8 bg-card rounded-2xl border border-card-border shadow-sm transition-all hover:shadow-md hover:border-secondary/40 hover:-translate-y-0.5 flex flex-col items-center text-center space-y-4 disabled:opacity-60"
           >
-            <div className="w-16 h-16 bg-secondary/10 rounded-full flex items-center justify-center text-secondary">
+            <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center text-secondary transition-transform group-hover:scale-105">
               {setRole.isPending && selected === "studente" ? (
                 <Loader2 className="w-8 h-8 animate-spin" />
               ) : (
                 <GraduationCap className="w-8 h-8" />
               )}
             </div>
-            <h2 className="text-xl font-semibold">Sono uno studente</h2>
+            <h2 className="font-display text-xl font-semibold text-secondary">Sono uno studente</h2>
             <p className="text-muted-foreground text-sm">Entra in una classe con il codice fornito dal tuo docente.</p>
           </button>
         </div>

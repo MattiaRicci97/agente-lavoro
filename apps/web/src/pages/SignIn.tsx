@@ -31,12 +31,12 @@ export default function SignIn() {
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
-      <Card className="w-[440px] max-w-full">
+      <Card className="w-[440px] max-w-full shadow-lg">
         <CardHeader className="text-center">
-          <div className="flex justify-center mb-2">
-            <Logo size="lg" />
+          <div className="mb-3 flex justify-center">
+            <Logo className="text-primary" size="lg" />
           </div>
-          <CardTitle>Bentornato</CardTitle>
+          <CardTitle className="font-display text-2xl">Bentornato</CardTitle>
           <CardDescription>Accedi per continuare su Sillabo</CardDescription>
         </CardHeader>
         <CardContent>
