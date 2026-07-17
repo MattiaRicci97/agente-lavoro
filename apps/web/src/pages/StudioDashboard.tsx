@@ -4,7 +4,7 @@ import { timeGreeting, firstName } from "@/lib/greeting";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { BookOpen, BrainCircuit, PlayCircle, FileText } from "lucide-react";
+import { BookOpen, BrainCircuit, PlayCircle, FileText, GraduationCap } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
 
@@ -79,6 +79,13 @@ export default function StudioDashboard() {
                       </Link>
                     </Button>
                   </div>
+
+                  <Button asChild variant="ghost" className="w-full justify-center text-secondary hover:bg-secondary/10">
+                    <Link href={`/studio/material/${material.id}/tutor`}>
+                      <GraduationCap className="w-4 h-4 mr-2" />
+                      Hai un dubbio? Chiedi al tutor
+                    </Link>
+                  </Button>
                 </CardContent>
               </Card>
             ))}

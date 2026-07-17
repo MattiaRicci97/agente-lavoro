@@ -24,6 +24,7 @@ import StudioDashboard from "./pages/StudioDashboard";
 import StudioQuiz from "./pages/StudioQuiz";
 import StudioOrale from "./pages/StudioOrale";
 import StudioScritto from "./pages/StudioScritto";
+import StudioTutor from "./pages/StudioTutor";
 import StudioRipasso from "./pages/StudioRipasso";
 import StudioProfilo from "./pages/StudioProfilo";
 import StudioLampo from "./pages/StudioLampo";
@@ -210,6 +211,11 @@ function Router() {
       <Route path="/studio/material/:id/scritto">
         <StudentGate>
           <StudioScritto />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/material/:id/tutor">
+        <StudentGate>
+          <StudioTutor />
         </StudentGate>
       </Route>
 

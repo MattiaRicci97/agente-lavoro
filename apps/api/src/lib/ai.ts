@@ -324,3 +324,37 @@ export async function askTeacherAssistant(
   }
   return textBlock.text.trim();
 }
+
+export async function askStudyTutor(
+  material: { title: string; subject: string; gradeLevel: string; content: string },
+  besDsa: boolean,
+  history: Array<{ role: "user" | "assistant"; content: string }>,
+  question: string,
+): Promise<string> {
+  const inclusivo = besDsa
+    ? "Lo studente ha dichiarato BES/DSA: usa frasi brevi e dirette, lessico semplice, un concetto alla volta, elenchi puntati e grassetto per le parole chiave. Evita subordinate complesse. "
+    : "";
+
+  const message = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 1200,
+    system:
+      "Sei il tutor di studio di Sillabo: un insegnante paziente e incoraggiante che aiuta uno studente italiano a capire il materiale su cui sta studiando. " +
+      "Rispondi SEMPRE in italiano, con tono caldo e umano, adeguando il linguaggio al livello scolastico indicato. " +
+      "Il tuo compito e' spiegare, chiarire i dubbi, fare esempi concreti e analogie: NON interrogare e non mettere alla prova. " +
+      "Basati principalmente sul materiale fornito qui sotto. Se una domanda esce dal materiale, puoi aiutare comunque con spiegazioni generali corrette, ma segnala con garbo che va oltre la lezione caricata dal docente. " +
+      "Non dare mai per pigrizia la 'soluzione del compito' bell'e pronta: guida lo studente a capire. Sii conciso ma chiaro. " +
+      inclusivo +
+      `\n\nMATERIALE DI STUDIO\nTitolo: ${material.title}\nMateria: ${material.subject}\nLivello: ${material.gradeLevel}\n\nContenuto:\n${material.content.slice(0, 8000)}`,
+    messages: [
+      ...history.map((m) => ({ role: m.role, content: m.content }) as const),
+      { role: "user" as const, content: question },
+    ],
+  });
+
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("Anthropic non ha restituito testo");
+  }
+  return textBlock.text.trim();
+}
