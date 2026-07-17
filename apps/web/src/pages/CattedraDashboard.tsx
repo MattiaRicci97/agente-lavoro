@@ -3,10 +3,12 @@ import {
   useListMaterials,
   useListClasses,
   useDeleteMaterial,
+  useGetMe,
   getListMaterialsQueryKey,
   getGetDashboardSummaryQueryKey,
   customFetch,
 } from "@sillabo/api-client-react";
+import { timeGreeting, lastName } from "@/lib/greeting";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -196,15 +198,19 @@ export default function CattedraDashboard() {
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary();
   const { data: materials, isLoading: materialsLoading } = useListMaterials();
   const { data: classes, isLoading: classesLoading } = useListClasses();
+  const { data: me } = useGetMe();
 
   const hasNoClasses = !classesLoading && classes?.length === 0;
+
+  const surname = lastName(me?.teacher?.name);
+  const greeting = surname ? `${timeGreeting()}, Prof. ${surname}` : `${timeGreeting()}, Prof.`;
 
   return (
     <TeacherLayout>
       <div className="p-8 max-w-6xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">Buongiorno, Prof.</h1>
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">{greeting}</h1>
             <p className="text-muted-foreground mt-1">Ecco l'andamento delle sue classi oggi.</p>
           </div>
           <Button asChild>

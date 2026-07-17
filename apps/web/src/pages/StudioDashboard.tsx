@@ -1,5 +1,6 @@
-import { useListMaterials } from "@sillabo/api-client-react";
+import { useListMaterials, useGetMe } from "@sillabo/api-client-react";
 import { StudentLayout } from "@/components/StudentLayout";
+import { timeGreeting, firstName } from "@/lib/greeting";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -9,16 +10,20 @@ import { CurriculumBadge } from "@/components/CurriculumBadge";
 
 export default function StudioDashboard() {
   const { data: materials, isLoading } = useListMaterials();
+  const { data: me } = useGetMe();
+
+  const name = firstName(me?.studentMemberships?.[0]?.name);
+  const greeting = name ? `${timeGreeting()}, ${name}!` : "Cosa studiamo oggi?";
 
   return (
     <StudentLayout>
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="text-center space-y-3 mb-10">
           <h1 className="font-display text-4xl font-semibold tracking-tight text-secondary sm:text-5xl">
-            Cosa studiamo oggi?
+            {greeting}
           </h1>
           <p className="text-muted-foreground text-lg text-balance max-w-lg mx-auto">
-            Scegli un argomento e mettiti alla prova con quiz e simulazioni.
+            Cosa studiamo oggi? Scegli un argomento e mettiti alla prova con quiz e simulazioni.
           </p>
         </div>
 
