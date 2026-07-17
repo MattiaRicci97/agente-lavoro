@@ -156,6 +156,17 @@
   }
 }
 
+/* In stampa mostra solo la superficie stampabile (verifica/PDF), nascondendo
+   tutto il resto dell'app che altrimenti finirebbe nelle pagine successive. */
+@media print {
+  body:has(.print-surface) #root {
+    display: none !important;
+  }
+  .print-surface {
+    position: static !important;
+  }
+}
+
 @layer utilities {
   .font-serif {
     font-family: var(--font-serif);

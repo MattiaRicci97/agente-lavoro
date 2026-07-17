@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "wouter";
 import {
   useGetMaterial,
@@ -44,8 +45,8 @@ interface PrintableExam {
  * per portarla su carta o salvarla come PDF.
  */
 function PrintableExamView({ exam, onClose }: { exam: PrintableExam; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 bg-white text-black overflow-y-auto">
+  return createPortal(
+    <div className="print-surface fixed inset-0 z-50 bg-white text-black overflow-y-auto">
       <div className="max-w-3xl mx-auto p-8 print:p-0">
         <div className="flex justify-between items-center mb-6 print:hidden">
           <Button onClick={() => window.print()}>
@@ -72,7 +73,8 @@ function PrintableExamView({ exam, onClose }: { exam: PrintableExam; onClose: ()
           <div className="pt-8 text-xs text-neutral-500 print:text-neutral-500">Generata con Sillabo — il sistema operativo della didattica</div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

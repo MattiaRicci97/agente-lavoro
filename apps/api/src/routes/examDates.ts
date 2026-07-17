@@ -187,6 +187,16 @@ router.post("/exam-dates/:id/plan", requireAuth, async (req, res): Promise<void>
   }
 
   // Evita duplicati: rimuove il piano precedente per stesso materiale/studente ancora da fare.
+  await db
+    .delete(reviewItemsTable)
+    .where(
+      and(
+        eq(reviewItemsTable.materialId, exam.materialId),
+        eq(reviewItemsTable.studentName, membership.name),
+        eq(reviewItemsTable.status, "da_fare"),
+      ),
+    );
+
   const values = dueDates.flatMap((dueDate) =>
     topics.map((topic) => ({
       materialId: exam.materialId!,
