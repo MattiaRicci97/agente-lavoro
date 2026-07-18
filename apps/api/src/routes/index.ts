@@ -1,0 +1,40 @@
+import { Router, type IRouter } from "express";
+import healthRouter from "./health";
+import storageRouter from "./storage";
+import authRouter from "./auth";
+import profileRouter from "./profile";
+import materialsRouter from "./materials";
+import questionsRouter from "./questions";
+import quizRouter from "./quiz";
+import oralRouter from "./oral";
+import analyticsRouter from "./analytics";
+import institutionsRouter from "./institutions";
+import classesRouter from "./classes";
+import writtenExamsRouter from "./writtenExams";
+import reviewItemsRouter from "./reviewItems";
+import examDatesRouter from "./examDates";
+import moduleLearningRouter from "./moduleLearning";
+import assistantRouter from "./assistant";
+import tutorRouter from "./tutor";
+
+const router: IRouter = Router();
+
+router.use(healthRouter);
+router.use(storageRouter);
+router.use(authRouter);
+router.use(profileRouter);
+router.use(materialsRouter);
+router.use(questionsRouter);
+router.use(quizRouter);
+router.use(oralRouter);
+router.use(analyticsRouter);
+router.use(institutionsRouter);
+router.use(classesRouter);
+router.use(writtenExamsRouter);
+router.use(reviewItemsRouter);
+router.use(examDatesRouter);
+router.use(moduleLearningRouter);
+router.use(assistantRouter);
+router.use(tutorRouter);
+
+export default router;
