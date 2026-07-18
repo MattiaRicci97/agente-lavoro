@@ -7,3 +7,6 @@ build/
 *.tsbuildinfo
 .DS_Store
 *.log
+
+# Bundle API generato al build per Vercel
+api/_server.mjs

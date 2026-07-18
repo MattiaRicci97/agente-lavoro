@@ -13,6 +13,7 @@
     "db:setup": "pnpm --filter @sillabo/db run setup"
   },
   "devDependencies": {
+    "esbuild": "^0.25.12",
     "prettier": "^3.8.4",
     "typescript": "~5.9.3"
   }

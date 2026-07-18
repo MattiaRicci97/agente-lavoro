@@ -10,7 +10,12 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  // In serverless piu' istanze condividono il pooler di Supabase:
+  // teniamo poche connessioni per istanza per non esaurirlo.
+  max: Number(process.env.PG_POOL_MAX ?? 5),
+});
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
