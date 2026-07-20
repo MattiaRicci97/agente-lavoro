@@ -235,14 +235,14 @@ const CADENZA = {
 const GIORNI = ["Dom","Lun","Mar","Mer","Gio","Ven","Sab"];
 const MESI = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
 const ROLES = [
- {id:"capo",emoji:"🧭",name:"Caporedattore",who:"Tiene la rotta: piano editoriale, priorità e coerenza col brand.",out:"Piani editoriali · priorità settimanali · review di coerenza"},
+ {id:"capo",emoji:"🧭",name:"Caporedattore",web:true,who:"Tiene la rotta: piano editoriale, priorità e coerenza col brand.",out:"Piani editoriali · priorità settimanali · rassegna stampa"},
  {id:"script",emoji:"✍️",name:"Sceneggiatore",who:"Trasforma il tema in scaletta e script con hook, 3 blocchi e CTA.",out:"Hook · scalette · script completi · note di regia"},
  {id:"seo",emoji:"🔍",name:"SEO & Titolista",who:"Titoli che si fanno cliccare, keyword e descrizioni YouTube complete.",out:"Titoli SEO · keyword · descrizione con timestamp · testi miniatura"},
- {id:"data",emoji:"📊",name:"Data Analyst WorkStat",who:"Trova e spiega i numeri: ISTAT, Eurostat, INPS, con idee di grafici.",out:"Dati con fonti · letture dei trend · specifiche grafici"},
+ {id:"data",emoji:"📊",name:"Data Analyst WorkStat",web:true,who:"Trova e spiega i numeri: ISTAT, Eurostat, INPS, con idee di grafici.",out:"Dati verificati con fonti · letture dei trend · grafici"},
  {id:"social",emoji:"📣",name:"Social Media Manager",who:"Ricicla ogni video in short e post LinkedIn che portano traffico.",out:"Post LinkedIn · script short 60″ · caroselli"},
- {id:"news",emoji:"💌",name:"Newsletter Editor",who:"Confeziona la newsletter domenicale: la settimana in chiaro.",out:"Newsletter completa · oggetti email · anticipazioni"},
+ {id:"news",emoji:"💌",name:"Newsletter Editor",web:true,who:"Confeziona la newsletter domenicale: la settimana in chiaro.",out:"Newsletter completa · oggetti email · anticipazioni"},
  {id:"art",emoji:"🎨",name:"Art Director",who:"Miniature e asset visivi coerenti: blu scuro, turchese, bussola.",out:"Concept miniature · prompt grafici · brand check"},
- {id:"legal",emoji:"⚖️",name:"Fact-checker Normativo",who:"Verifica norme e istituti prima della pubblicazione. Zero figuracce.",out:"Tabella verifiche · riformulazioni · fonti ufficiali"}
+ {id:"legal",emoji:"⚖️",name:"Fact-checker Normativo",web:true,who:"Verifica norme e istituti sulle fonti ufficiali. Zero figuracce.",out:"Verifiche con URL · riformulazioni · fonti ufficiali"}
 ];
 const MODELS = [
   {id:"claude-opus-4-8",label:"Claude Opus 4.8 — massima qualità (consigliato)"},
@@ -531,7 +531,7 @@ function renderTeam(){
   <header class="page-head">
     <span class="eyebrow">Team AI · la tua redazione</span>
     <h1>Otto specialisti al lavoro per te</h1>
-    <p>Scegli il contenuto e avvia gli specialisti che ti servono — anche più di uno in contemporanea. Ogni risultato viene salvato nell'Archivio e nella scheda del contenuto.</p>
+    <p>Scegli il contenuto e avvia gli specialisti che ti servono — anche più di uno in contemporanea. Quelli con il segno 🌐 verificano davvero norme, dati e attualità sul web e citano le fonti. Ogni risultato viene salvato nell'Archivio e nella scheda del contenuto.</p>
   </header>
   ${S.settings.has_api_key?"":`<div class="card" style="border-color:rgba(242,184,75,.45)">
     <b style="color:var(--warn)">Team fermo:</b> <span class="muted">configura la chiave API Anthropic in <a href="#" data-view="impostazioni" style="color:var(--teal)">Impostazioni</a> per attivare gli agenti.</span>
@@ -546,9 +546,9 @@ function renderTeam(){
   <div class="team-grid">${ROLES.map(r=>`
     <div class="agent">
       <div class="ic">${r.emoji}</div>
-      <h3>${esc(r.name)}</h3>
+      <h3>${esc(r.name)} ${r.web?'<span class="chip" style="background:var(--teal-dim);color:var(--teal);padding:1px 7px">🌐 web</span>':''}</h3>
       <p>${esc(r.who)}</p>
-      <div class="out">${esc(r.out)}</div>
+      <div class="out">${esc(r.out)}${r.web?' · verifica sul web e cita le fonti':''}</div>
       ${S.running[r.id]
         ?`<button class="btn" disabled><span class="spinner" style="width:15px;height:15px;border-width:2px;margin:0"></span> Sta lavorando…</button>`
         :`<button class="btn ${S.settings.has_api_key?"primary":""}" data-work="${r.id}">Metti al lavoro</button>`}
@@ -564,7 +564,7 @@ function runRow(r,withDelete){
   const role=roleOf(r.role);
   return `<div class="run-row" data-run="${r.id}">
     <span style="flex:none">${role.emoji}</span>
-    <div style="min-width:0"><div class="t">${esc(role.name)}${r.status==="error"?' <span class="chip err">errore</span>':""}</div>
+    <div style="min-width:0"><div class="t">${esc(role.name)}${r.searches?' <span title="Ha usato la ricerca web">🌐</span>':""}${r.status==="error"?' <span class="chip err">errore</span>':""}</div>
     <div class="sub">${esc(r.content_title||"Progetto generale")}</div></div>
     <span class="when">${esc(fmtDateTime(r.created_at))}</span>
     ${withDelete?`<button class="btn small ghost" data-del-run="${r.id}" title="Elimina questo lavoro" aria-label="Elimina" style="color:var(--ink3);flex:none">✕</button>`:""}</div>`;
@@ -618,9 +618,15 @@ async function openRun(id){
       Object.assign(r,run);
     }catch(err){closeModal();fail(err);return}
   }
+  const srcHtml=(r.sources&&r.sources.length)?`<div style="margin-top:14px">
+    <span class="field-label">🌐 Fonti trovate sul web · ${r.sources.length}</span>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+    ${r.sources.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" style="color:var(--teal);font-size:13px;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">↗ ${esc(s.title||s.url)}</a>`).join("")}
+    </div></div>`:"";
   openModal(`<h2>${role.emoji} ${esc(role.name)} · ${esc(r.content_title||"Progetto generale")}</h2>
-    <p class="mutex" style="font-size:12px;margin-bottom:10px">${esc(fmtDateTime(r.created_at))} · ${esc(r.model||"")}${r.output_tokens?` · ${r.output_tokens} token generati`:""}</p>
+    <p class="mutex" style="font-size:12px;margin-bottom:10px">${esc(fmtDateTime(r.created_at))} · ${esc(r.model||"")}${r.searches?` · 🌐 ${r.searches} ${r.searches===1?"ricerca web":"ricerche web"}`:""}${r.output_tokens?` · ${r.output_tokens} token generati`:""}</p>
     <div class="output-box">${esc(r.output||"(vuoto)")}</div>
+    ${srcHtml}
     <div class="modal-foot">
       <button class="btn primary" id="copy-run">Copia testo</button>
       <div class="right"><button class="btn ghost" data-close>Chiudi</button></div>

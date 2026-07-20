@@ -28,10 +28,14 @@ RUBRICHE: Basi di Lavoro, FAQ Professionali, WorkStat, HR Tech & Cyber, Sociolog
 CALENDARIO: lunedì short teaser, mercoledì short + post LinkedIn, venerdì video principale (mini-lezione 5′ o approfondimento 15-20′), domenica newsletter.
 VINCOLI: il creator è una persona sola, lavora e ha poco tempo: cerca sempre il miglior compromesso tra qualità alta e sostenibilità operativa. Produci direttamente l'output richiesto, in italiano; se mancano dettagli fai assunzioni ragionevoli e segnalale in fondo.`;
 
-const ROLES: Record<string, { name: string; brief: string }> = {
+const WEB_NOTE = `\n\n=== STRUMENTO RICERCA WEB ===
+Hai accesso alla ricerca web. USALA per verificare norme, dati e attualità prima di scrivere: cerca fonti ufficiali, italiane e aggiornate al 2026 (Gazzetta Ufficiale, normattiva.it, ISTAT, Eurostat, INPS, Ministero del Lavoro, testate autorevoli). Cita SEMPRE l'URL preciso della fonte accanto a ogni affermazione fattuale (dato, norma, importo, data). Distingui i fatti verificati dalle interpretazioni. Usa [DA VERIFICARE] solo se, dopo aver cercato, resta un'incertezza reale. Non citare fonti che non hai davvero consultato.`;
+
+const ROLES: Record<string, { name: string; brief: string; web?: boolean }> = {
   capo: {
     name: "Caporedattore",
-    brief: `Sei il Caporedattore di WorkInProgress. Valuta il contenuto indicato (o, se non ce n'è uno, la situazione descritta): coerenza con rubrica e brand, angolo migliore, promessa per lo spettatore, priorità rispetto al calendario settimanale. Se opportuno proponi un piano settimanale con i 4 slot completi e collegamenti tra i contenuti (lo short del lunedì anticipa il video del venerdì).
+    web: true,
+    brief: `Sei il Caporedattore di WorkInProgress. Valuta il contenuto indicato (o, se non ce n'è uno, la situazione descritta): coerenza con rubrica e brand, angolo migliore, promessa per lo spettatore, priorità rispetto al calendario settimanale. Se opportuno proponi un piano settimanale con i 4 slot completi e collegamenti tra i contenuti (lo short del lunedì anticipa il video del venerdì). Quando serve, usa la ricerca web per una rassegna stampa rapida sui temi del lavoro (utile per i News Flash) e per capire se un tema è già molto coperto.
 OUTPUT: raccomandazione sintetica, piano in punti, rischi (fonti deboli, tema già coperto, carico di produzione eccessivo per un creator solo).`,
   },
   script: {
@@ -44,7 +48,8 @@ OUTPUT: raccomandazione sintetica, piano in punti, rischi (fonti deboli, tema gi
   },
   data: {
     name: "Data Analyst WorkStat",
-    brief: `Sei il Data Analyst della rubrica WorkStat di WorkInProgress. Per il tema indicato: 1) elenca i dati più rilevanti e recenti da fonti istituzionali (ISTAT, Eurostat, INPS, Ministero del Lavoro) con riferimento preciso a dataset/report e anno — se non puoi verificare un numero scrivi [DA VERIFICARE] e indica dove controllarlo; 2) spiega cosa dicono davvero i numeri distinguendo fatto e interpretazione; 3) proponi 2-3 grafici (tipo, variabili, titolo, takeaway in una frase) coerenti col brand; 4) segnala le trappole statistiche comuni sul tema.`,
+    web: true,
+    brief: `Sei il Data Analyst della rubrica WorkStat di WorkInProgress. Per il tema indicato: 1) cerca ed elenca i dati più rilevanti e recenti da fonti istituzionali (ISTAT, Eurostat, INPS, Ministero del Lavoro) con riferimento preciso a dataset/report, anno e URL — verifica ogni numero con la ricerca web prima di riportarlo; 2) spiega cosa dicono davvero i numeri distinguendo fatto e interpretazione; 3) proponi 2-3 grafici (tipo, variabili, titolo, takeaway in una frase) coerenti col brand; 4) segnala le trappole statistiche comuni sul tema.`,
   },
   social: {
     name: "Social Media Manager",
@@ -52,6 +57,7 @@ OUTPUT: raccomandazione sintetica, piano in punti, rischi (fonti deboli, tema gi
   },
   news: {
     name: "Newsletter Editor",
+    web: true,
     brief: `Sei il Newsletter Editor di WorkInProgress. Scrivi la newsletter domenicale completa: 1) tre proposte di oggetto email (il consigliato evidenziato, max 50 caratteri); 2) apertura calda e diretta (2-3 frasi); 3) "La settimana in breve" con i contenuti della settimana e una riga di takeaway ciascuno; 4) "Cosa è cambiato": 1-2 novità normative o di mercato con fonte; 5) anticipazione della settimana successiva; 6) CTA finale. Tono da email a un amico curioso, paragrafi corti, zero gergo.`,
   },
   art: {
@@ -60,7 +66,8 @@ OUTPUT: raccomandazione sintetica, piano in punti, rischi (fonti deboli, tema gi
   },
   legal: {
     name: "Fact-checker Normativo",
-    brief: `Sei il Fact-checker normativo di WorkInProgress, esperto di diritto del lavoro italiano. Per il contenuto o lo script indicato: 1) elenca ogni affermazione normativa o giuridica presente o implicita nel tema; 2) per ciascuna indica: corretta / imprecisa / da verificare, con la fonte ufficiale esatta da controllare (norma, articolo, circolare, sito istituzionale); 3) segnala se una norma potrebbe essere stata modificata di recente e cosa cercare per confermarlo; 4) proponi la riformulazione corretta e prudente delle frasi a rischio, mantenendo il tono divulgativo; 5) suggerisci il disclaimer minimo se il tema tocca casi personali. Non inventare mai riferimenti normativi: se non sei certo scrivi [DA VERIFICARE SU FONTE UFFICIALE].`,
+    web: true,
+    brief: `Sei il Fact-checker normativo di WorkInProgress, esperto di diritto del lavoro italiano. Per il contenuto o lo script indicato: 1) elenca ogni affermazione normativa o giuridica presente o implicita nel tema; 2) per ciascuna VERIFICA con la ricerca web sulla fonte ufficiale (norma, articolo, circolare, sito istituzionale) e indica: corretta / imprecisa / da verificare, con l'URL preciso; 3) controlla via web se una norma è stata modificata di recente e riporta la versione vigente; 4) proponi la riformulazione corretta e prudente delle frasi a rischio, mantenendo il tono divulgativo; 5) suggerisci il disclaimer minimo se il tema tocca casi personali. Non inventare mai riferimenti normativi: verifica sempre prima di affermare, e usa [DA VERIFICARE SU FONTE UFFICIALE] solo se dopo la ricerca resta incertezza.`,
   },
 };
 
@@ -124,15 +131,25 @@ async function runAgent(payload: Record<string, unknown>, settings: Settings) {
   user += "\n\nProduci direttamente l'output previsto dal tuo ruolo, ben formattato e pronto all'uso.";
 
   const anthropic = new Anthropic({ apiKey });
-  const req: Anthropic.MessageCreateParams = {
+  const req: Record<string, unknown> = {
     model,
     max_tokens: 16000,
-    system: `${BASE_CONTEXT}\n\n=== IL TUO RUOLO ===\n${role.brief}`,
-    messages: [{ role: "user", content: user }],
+    system: `${BASE_CONTEXT}\n\n=== IL TUO RUOLO ===\n${role.brief}${role.web ? WEB_NOTE : ""}`,
   };
   // Adaptive thinking: supportato su Opus 4.6+ / Sonnet 4.6+; Haiku 4.5 non lo accetta
   if (model.startsWith("claude-opus") || model.startsWith("claude-sonnet")) {
-    (req as Record<string, unknown>).thinking = { type: "adaptive" };
+    req.thinking = { type: "adaptive" };
+  }
+  // Ricerca web reale per i ruoli che verificano fatti, dati e norme.
+  // La variante _20260209 (con dynamic filtering) richiede Opus/Sonnet; Haiku usa la base.
+  if (role.web) {
+    const webType = model.startsWith("claude-haiku") ? "web_search_20250305" : "web_search_20260209";
+    req.tools = [{
+      type: webType,
+      name: "web_search",
+      max_uses: 6,
+      user_location: { type: "approximate", country: "IT", timezone: "Europe/Rome" },
+    }];
   }
 
   const saveRun = async (fields: Record<string, unknown>) => {
@@ -148,21 +165,58 @@ async function runAgent(payload: Record<string, unknown>, settings: Settings) {
   };
 
   try {
-    const msg = await anthropic.messages.create(req);
-    if (msg.stop_reason === "refusal") {
+    // Loop per gli strumenti server-side: se il modello mette in pausa
+    // (pause_turn) per continuare la ricerca, si rilancia con la storia.
+    const messages: unknown[] = [{ role: "user", content: user }];
+    const collected: Record<string, unknown>[] = [];
+    let inTok = 0, outTok = 0, searches = 0;
+    const sources: { url: string; title: string }[] = [];
+    let last: Anthropic.Message | undefined;
+
+    for (let i = 0; i < 5; i++) {
+      last = await anthropic.messages.create({ ...req, messages } as Anthropic.MessageCreateParams);
+      inTok += last.usage.input_tokens;
+      outTok += last.usage.output_tokens;
+      for (const b of last.content as Record<string, unknown>[]) {
+        collected.push(b);
+        if (b.type === "web_search_tool_result") {
+          searches++;
+          const c = (b as { content?: unknown }).content;
+          if (Array.isArray(c)) {
+            for (const r of c as Record<string, unknown>[]) {
+              if (r.type === "web_search_result" && r.url) {
+                sources.push({ url: String(r.url), title: String(r.title ?? r.url) });
+              }
+            }
+          }
+        }
+      }
+      if (last.stop_reason === "pause_turn") {
+        messages.push({ role: "assistant", content: last.content });
+        continue;
+      }
+      break;
+    }
+
+    if (last && last.stop_reason === "refusal") {
       const run = await saveRun({ status: "error", output: "La richiesta è stata rifiutata dai filtri di sicurezza del modello." });
       return json({ error: "Richiesta rifiutata dai filtri di sicurezza del modello.", run }, 400);
     }
-    const text = msg.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
+
+    const text = collected
+      .filter((b) => b.type === "text")
+      .map((b) => String((b as { text?: unknown }).text ?? ""))
       .join("\n")
       .trim();
+    const uniqSources = [...new Map(sources.map((s) => [s.url, s])).values()].slice(0, 12);
+
     const run = await saveRun({
       status: "ok",
       output: text,
-      input_tokens: msg.usage.input_tokens,
-      output_tokens: msg.usage.output_tokens,
+      input_tokens: inTok,
+      output_tokens: outTok,
+      searches,
+      sources: uniqSources.length ? uniqSources : null,
     });
     return json({ run });
   } catch (e) {
@@ -215,7 +269,7 @@ Deno.serve(async (req) => {
           db.from("ideas").select("*").order("created_at", { ascending: false }),
           // metadati soltanto: l'output completo si recupera con run.get
           db.from("agent_runs")
-            .select("id, content_id, content_title, role, role_name, model, status, input_tokens, output_tokens, created_at")
+            .select("id, content_id, content_title, role, role_name, model, status, searches, input_tokens, output_tokens, created_at")
             .order("created_at", { ascending: false }).limit(300),
         ]);
         return json({
