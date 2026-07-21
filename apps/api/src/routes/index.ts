@@ -16,7 +16,6 @@ import examDatesRouter from "./examDates";
 import moduleLearningRouter from "./moduleLearning";
 import assistantRouter from "./assistant";
 import tutorRouter from "./tutor";
-import debugRouter from "./debug";
 
 const router: IRouter = Router();
 
@@ -37,6 +36,5 @@ router.use(examDatesRouter);
 router.use(moduleLearningRouter);
 router.use(assistantRouter);
 router.use(tutorRouter);
-router.use(debugRouter);
 
 export default router;
