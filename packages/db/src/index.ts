@@ -15,6 +15,9 @@ export const pool = new Pool({
   // In serverless piu' istanze condividono il pooler di Supabase:
   // teniamo poche connessioni per istanza per non esaurirlo.
   max: Number(process.env.PG_POOL_MAX ?? 5),
+  // Se il database non e' raggiungibile, fallisci in fretta invece di
+  // restare appeso all'infinito (in serverless bloccherebbe la richiesta).
+  connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS ?? 10000),
 });
 export const db = drizzle(pool, { schema });
 
