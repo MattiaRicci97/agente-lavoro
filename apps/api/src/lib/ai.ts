@@ -1,13 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "./logger";
 
-if (!process.env.ANTHROPIC_API_KEY) {
-  throw new Error(
-    "ANTHROPIC_API_KEY deve essere impostata per le funzioni AI (vedi .env.example nella radice del repo)",
-  );
+// Client Anthropic creato solo al primo utilizzo: cosi' il server si avvia
+// anche se la chiave non e' impostata, e sono solo le funzioni AI a fallire
+// (con un errore chiaro) invece di far crashare l'intero server all'avvio.
+let _anthropic: Anthropic | null = null;
+function getAnthropic(): Anthropic {
+  if (!_anthropic) {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY non impostata: le funzioni AI non sono disponibili");
+    }
+    _anthropic = new Anthropic();
+  }
+  return _anthropic;
 }
-
-const anthropic = new Anthropic();
 
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
 
@@ -35,7 +41,7 @@ export async function generateActiveRecallQuestions(
   gradeLevel: string,
   content: string,
 ): Promise<GeneratedQuestion[]> {
-  const message = await anthropic.messages.create({
+  const message = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 8192,
     system:
@@ -74,7 +80,7 @@ export async function gradeQuizAnswer(
   correctAnswer: string,
   studentAnswer: string,
 ): Promise<GradedAnswerResult> {
-  const message = await anthropic.messages.create({
+  const message = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 1024,
     system:
@@ -110,7 +116,7 @@ export async function classifyCurriculumTopic(
   gradeLevel: string,
   content: string,
 ): Promise<CurriculumTagResult> {
-  const message = await anthropic.messages.create({
+  const message = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 512,
     system:
@@ -142,7 +148,7 @@ export async function generateSimplifiedContent(
   gradeLevel: string,
   content: string,
 ): Promise<string> {
-  const message = await anthropic.messages.create({
+  const message = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 4096,
     system:
@@ -186,7 +192,7 @@ export async function generateWrittenExamPrompt(
 ): Promise<WrittenExamPromptResult> {
   const label = EXAM_TYPE_LABELS[examType] ?? examType;
 
-  const message = await anthropic.messages.create({
+  const message = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 2048,
     system:
@@ -224,7 +230,7 @@ export async function gradeWrittenExam(
 ): Promise<WrittenExamGradeResult> {
   const label = EXAM_TYPE_LABELS[examType] ?? examType;
 
-  const message = await anthropic.messages.create({
+  const message = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 1500,
     system:
@@ -265,7 +271,7 @@ export async function nextOralExamTurn(
   const turnsSoFar = transcript.filter((m) => m.role === "examiner").length;
   const shouldWrapUp = turnsSoFar >= 4;
 
-  const message = await anthropic.messages.create({
+  const message = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 1200,
     system:
@@ -303,7 +309,7 @@ export async function askTeacherAssistant(
   history: Array<{ role: "user" | "assistant"; content: string }>,
   question: string,
 ): Promise<string> {
-  const message = await anthropic.messages.create({
+  const message = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 1500,
     system:
@@ -335,7 +341,7 @@ export async function askStudyTutor(
     ? "Lo studente ha dichiarato BES/DSA: usa frasi brevi e dirette, lessico semplice, un concetto alla volta, elenchi puntati e grassetto per le parole chiave. Evita subordinate complesse. "
     : "";
 
-  const message = await anthropic.messages.create({
+  const message = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 1200,
     system:
