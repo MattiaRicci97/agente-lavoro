@@ -128,6 +128,16 @@ async function runAgent(payload: Record<string, unknown>, settings: Settings) {
   if (payload.extra && String(payload.extra).trim()) {
     user += `\n\n=== ISTRUZIONI AGGIUNTIVE DEL DIRETTORE ===\n${String(payload.extra).trim()}`;
   }
+  // Catena "Pacchetto completo": il lavoro degli specialisti precedenti
+  // viene passato come base, così ogni agente costruisce sopra invece di ripartire.
+  if (Array.isArray(payload.priors) && payload.priors.length) {
+    user += "\n\n=== LAVORO GIÀ PRODOTTO DAGLI ALTRI SPECIALISTI SU QUESTO CONTENUTO ===\nUsalo come base: costruisci sopra, resta coerente e non ripetere ciò che è già stato fatto. Se sei il Fact-checker, verifica proprio questo testo.";
+    for (const p of payload.priors as { role_name?: unknown; output?: unknown }[]) {
+      const rn = String(p.role_name ?? "Specialista");
+      const out = String(p.output ?? "").slice(0, 6000);
+      if (out) user += `\n\n--- ${rn} ---\n${out}`;
+    }
+  }
   user += "\n\nProduci direttamente l'output previsto dal tuo ruolo, ben formattato e pronto all'uso.";
 
   const anthropic = new Anthropic({ apiKey });
@@ -159,6 +169,7 @@ async function runAgent(payload: Record<string, unknown>, settings: Settings) {
       role: payload.role,
       role_name: role.name,
       model,
+      chain_id: (payload.chain_id as string) ?? null,
       ...fields,
     }).select().single();
     return data;
@@ -269,7 +280,7 @@ Deno.serve(async (req) => {
           db.from("ideas").select("*").order("created_at", { ascending: false }),
           // metadati soltanto: l'output completo si recupera con run.get
           db.from("agent_runs")
-            .select("id, content_id, content_title, role, role_name, model, status, searches, input_tokens, output_tokens, created_at")
+            .select("id, content_id, content_title, role, role_name, model, status, searches, chain_id, input_tokens, output_tokens, created_at")
             .order("created_at", { ascending: false }).limit(300),
         ]);
         return json({

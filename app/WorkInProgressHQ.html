@@ -252,7 +252,20 @@ const MODELS = [
 
 /* ============ STATO E API ============ */
 let KEY = localStorage.getItem(KEY_STORE) || "";
-let S = { view:"oggi", loaded:false, contents:[], ideas:[], runs:[], settings:{model:"claude-opus-4-8",has_api_key:false}, teamSel:"", running:{}, archRole:"", archQ:"" };
+let S = { view:"oggi", loaded:false, contents:[], ideas:[], runs:[], settings:{model:"claude-opus-4-8",has_api_key:false}, teamSel:"", running:{}, archRole:"", archQ:"", chain:null, chainOpen:false };
+
+// Catena "Pacchetto completo": ordine canonico della pipeline e default per formato.
+const CHAIN_ORDER = ["capo","script","data","legal","seo","social","news","art"];
+function defaultChain(formato){
+  const f=formato||"";
+  if(f.indexOf("Newsletter")>=0) return ["capo","news"];
+  if(f.indexOf("Short")>=0) return ["capo","script","social"];
+  if(f.indexOf("LinkedIn")>=0) return ["capo","social"];
+  if(f.indexOf("Infografica")>=0||f.indexOf("Report")>=0) return ["capo","data","art"];
+  if(f.indexOf("News Flash")>=0) return ["capo","legal","seo","social"];
+  return ["capo","script","legal","seo","social"]; // mini-lezione, video lungo
+}
+function uuid(){return (crypto.randomUUID?crypto.randomUUID():"c"+Date.now()+Math.random().toString(16).slice(2))}
 
 async function api(action, payload){
   const res = await fetch(API_URL, {
@@ -542,7 +555,9 @@ function renderTeam(){
       <option value="">— Nessuno: lavoro a livello di progetto —</option>
       ${attivi.map(c=>`<option value="${c.id}" ${S.teamSel===c.id?"selected":""}>${esc(fmtDate(c.data_pub))} · ${esc(c.title)}</option>`).join("")}
     </select>
+    <button class="btn ${S.teamSel?"primary":""}" data-chain-team title="Metti in catena tutta la redazione sul contenuto selezionato">🚀 Pacchetto completo</button>
   </div>
+  ${chainBannerHTML()}
   <div class="team-grid">${ROLES.map(r=>`
     <div class="agent">
       <div class="ic">${r.emoji}</div>
@@ -635,6 +650,114 @@ async function openRun(id){
     try{await navigator.clipboard.writeText(r.output||"");toast("Copiato negli appunti")}
     catch(e){toast("Copia non riuscita: seleziona il testo a mano",true)}
   });
+}
+
+/* ============ PACCHETTO COMPLETO (catena di agenti) ============ */
+function openChainSetup(content){
+  if(!content){toast("Seleziona prima un contenuto",true);return}
+  if(!S.settings.has_api_key){toast("Prima configura la chiave API in Impostazioni",true);S.view="impostazioni";render();return}
+  const def=new Set(defaultChain(content.formato));
+  openModal(`<h2>🚀 Pacchetto completo · ${esc(content.title)}</h2>
+    <p class="muted" style="font-size:13.5px;margin-bottom:8px">Scegli quali specialisti mettere in catena. Lavorano in quest'ordine, ognuno partendo dal lavoro del precedente. Dopo potrai rifare ogni singolo passaggio.</p>
+    <div>${CHAIN_ORDER.map(r=>{const role=roleOf(r);return `<label class="check ${def.has(r)?"on":""}"><input type="checkbox" data-chain-role="${r}" ${def.has(r)?"checked":""}> ${role.emoji} ${esc(role.name)}${role.web?" 🌐":""}</label>`}).join("")}</div>
+    <div class="modal-foot">
+      <button class="btn primary" id="chain-go">Avvia pacchetto</button>
+      <div class="right"><button class="btn ghost" data-close>Annulla</button></div>
+    </div>`);
+  document.querySelectorAll("[data-chain-role]").forEach(el=>el.addEventListener("change",e=>{
+    e.target.closest(".check").classList.toggle("on",e.target.checked);
+  }));
+  $("#chain-go").addEventListener("click",()=>{
+    const ids=CHAIN_ORDER.filter(r=>{const el=document.querySelector(`[data-chain-role="${r}"]`);return el&&el.checked});
+    if(!ids.length){toast("Seleziona almeno uno specialista",true);return}
+    closeModal();startChain(content,ids);
+  });
+}
+function chainBusy(){return S.chain&&S.chain.steps.some(s=>s.status==="run")}
+function chainPriors(upto){
+  const out=[];
+  for(let j=0;j<upto;j++){const st=S.chain.steps[j];
+    if(st.status==="done"&&st.output)out.push({role_name:roleOf(st.role).name,output:st.output});}
+  return out;
+}
+async function runChainStep(i){
+  const st=S.chain.steps[i];
+  st.status="run";refreshChain();
+  try{
+    const {run}=await api("agent.run",{role:st.role,content_id:S.chain.contentId,chain_id:S.chain.chainId,priors:chainPriors(i)});
+    S.runs.unshift(run);
+    st.status=run.status==="error"?"error":"done";st.runId=run.id;st.output=run.output||"";
+  }catch(err){
+    st.status="error";toast(roleOf(st.role).name+": "+(err.message||"errore"),true);
+  }
+  refreshChain();
+}
+async function startChain(content,roleIds){
+  S.chain={chainId:uuid(),contentId:content.id,title:content.title,active:true,
+    steps:roleIds.map(r=>({role:r,status:"queue",runId:null,output:""}))};
+  openChainModal();
+  toast("🚀 Pacchetto avviato: la redazione lavora in catena");
+  for(let i=0;i<S.chain.steps.length;i++)await runChainStep(i);
+  S.chain.active=false;refreshChain();
+  const ok=S.chain.steps.filter(s=>s.status==="done").length;
+  toast("Pacchetto pronto: "+ok+"/"+S.chain.steps.length+" lavori nell'Archivio");
+  if(S.view==="team"||S.view==="archivio")render();
+}
+async function redoStep(i){
+  if(!S.chain||chainBusy())return;
+  await runChainStep(i);
+  toast("Rifatto: "+roleOf(S.chain.steps[i].role).name);
+}
+async function redoFrom(i){
+  if(!S.chain||chainBusy())return;
+  S.chain.active=true;refreshChain();
+  for(let j=i;j<S.chain.steps.length;j++)await runChainStep(j);
+  S.chain.active=false;refreshChain();
+  toast("Rifatti i passaggi da "+roleOf(S.chain.steps[i].role).name+" in poi");
+  if(S.view==="team"||S.view==="archivio")render();
+}
+function chainModalHTML(){
+  const ch=S.chain;if(!ch)return "";
+  const busy=chainBusy();
+  const done=ch.steps.filter(s=>s.status==="done").length;
+  return `<h2>🚀 Pacchetto completo · ${esc(ch.title||"Contenuto")}</h2>
+   <p class="muted" style="font-size:13px;margin-bottom:12px">Ogni specialista parte dal lavoro del precedente. Non ti convince un passaggio? Rifallo — da solo o insieme ai successivi.</p>
+   ${ch.steps.map((s,i)=>{
+     const r=roleOf(s.role);
+     const badge=s.status==="run"?'<span class="spinner" style="width:14px;height:14px;border-width:2px;margin:0;display:inline-block;vertical-align:middle"></span>'
+       :s.status==="done"?'<span class="chip done">fatto</span>'
+       :s.status==="error"?'<span class="chip err">errore</span>'
+       :'<span class="chip">in coda</span>';
+     const acts=((s.status==="done"||s.status==="error")&&!busy)?
+       `<button class="btn small ghost" data-chain-open-run="${i}">Apri</button>
+        <button class="btn small" data-chain-redo="${i}">🔄 Rifai</button>
+        ${i<ch.steps.length-1?`<button class="btn small ghost" data-chain-redo-from="${i}" title="Rifai questo passaggio e tutti i successivi">↦ da qui</button>`:""}`:"";
+     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line)">
+       <span style="flex:none;width:18px;text-align:center;color:var(--ink3);font-variant-numeric:tabular-nums">${i+1}</span>
+       <span style="flex:none">${r.emoji}</span>
+       <div style="flex:1;min-width:0"><b style="font-size:13.5px">${esc(r.name)}${r.web?' <span title="ricerca web">🌐</span>':""}</b></div>
+       <div style="display:flex;gap:6px;align-items:center;flex:none;flex-wrap:wrap;justify-content:flex-end">${acts}${badge}</div>
+     </div>`;
+   }).join("")}
+   <div class="modal-foot">
+     ${ch.active?`<span class="mutex" style="font-size:13px"><span class="spinner" style="width:13px;height:13px;border-width:2px;margin:0;display:inline-block;vertical-align:middle"></span> La redazione sta lavorando… ${done}/${ch.steps.length}</span>`
+       :`<span class="mutex" style="font-size:13px">Pronto · ${done}/${ch.steps.length} completati — apri l'Archivio per rileggere tutto</span>`}
+     <div class="right"><button class="btn ghost" data-close>Chiudi</button></div>
+   </div>`;
+}
+function openChainModal(){S.chainOpen=true;openModal(chainModalHTML())}
+function refreshChain(){
+  if(S.chainOpen){const m=$(".modal");if(m)m.innerHTML=chainModalHTML();}
+  const b=$("#chain-banner");if(b)b.outerHTML=chainBannerHTML();
+}
+function chainBannerHTML(){
+  const ch=S.chain;if(!ch)return '<div id="chain-banner"></div>';
+  const done=ch.steps.filter(s=>s.status==="done").length;
+  return `<div id="chain-banner" class="card" style="border-color:rgba(205,245,86,.4);display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer" data-chain-open>
+    <b style="color:var(--lime)">🚀 Pacchetto ${ch.active?"in corso":"pronto"}</b>
+    <span class="muted" style="font-size:13.5px">${esc(ch.title)} · ${done}/${ch.steps.length}</span>
+    <button class="btn small" style="margin-left:auto" data-chain-open>Apri</button>
+  </div>`;
 }
 
 /* ============ VISTA: ARCHIVIO ============ */
@@ -771,7 +894,7 @@ function openModal(html){
   $(".backdrop").addEventListener("click",e=>{if(e.target.classList.contains("backdrop"))closeModal()});
   document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",closeModal));
 }
-function closeModal(){$("#overlay").innerHTML=""}
+function closeModal(){$("#overlay").innerHTML="";S.chainOpen=false}
 
 function newContent(preset){
   return {id:crypto.randomUUID(),title:"",rubrica:"Basi di Lavoro",
@@ -808,7 +931,8 @@ function openEditor(id,preset){
   ${myRuns.length?`<div style="margin-top:16px"><span class="field-label">Lavori del Team AI · ${myRuns.length}</span>
     ${myRuns.map(runRow).join("")}</div>`:""}
   <div class="modal-foot">
-    ${isNew?"":`<button class="btn danger" id="del-content" type="button">Elimina</button>`}
+    ${isNew?"":`<button class="btn danger" id="del-content" type="button">Elimina</button>
+      <button class="btn" data-chain-content="${c.id}" type="button" title="Metti in catena la redazione su questo contenuto">🚀 Pacchetto</button>`}
     <div class="right">
       <button class="btn ghost" data-close type="button">Annulla</button>
       <button class="btn primary" id="save-content" type="button">${isNew?"Crea contenuto":"Salva"}</button>
@@ -863,6 +987,19 @@ document.addEventListener("click",async e=>{
   }
   const wk=e.target.closest("[data-work]");
   if(wk){openWork(wk.dataset.work);return}
+  const ct=e.target.closest("[data-chain-team]");
+  if(ct){openChainSetup(S.contents.find(x=>x.id===S.teamSel));return}
+  const cc=e.target.closest("[data-chain-content]");
+  if(cc){const c=S.contents.find(x=>x.id===cc.dataset.chainContent);closeModal();openChainSetup(c);return}
+  const co=e.target.closest("[data-chain-open]");
+  if(co){openChainModal();return}
+  const cor=e.target.closest("[data-chain-open-run]");
+  if(cor){const st=S.chain&&S.chain.steps[Number(cor.dataset.chainOpenRun)];if(st&&st.runId)openRun(st.runId);return}
+  const crd=e.target.closest("[data-chain-redo]");
+  if(crd){redoStep(Number(crd.dataset.chainRedo));return}
+  const crf=e.target.closest("[data-chain-redo-from]");
+  if(crf){redoFrom(Number(crf.dataset.chainRedoFrom));return}
+  if(e.target.closest("[data-close]")){closeModal();return}
   const rn=e.target.closest("[data-run]");
   if(rn&&!e.target.closest("[data-del-run]")){openRun(rn.dataset.run);return}
   const pr=e.target.closest("[data-promote]");
