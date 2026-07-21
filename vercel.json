@@ -5,7 +5,7 @@
   "outputDirectory": "apps/web/dist",
   "regions": ["fra1"],
   "functions": {
-    "api/index.js": {
+    "api/index.mjs": {
       "maxDuration": 60
     }
   },
