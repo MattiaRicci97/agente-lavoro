@@ -4,10 +4,10 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
+// Non blocchiamo l'avvio del server se manca la variabile: le query
+// falliranno con un errore chiaro (utile in serverless per la diagnosi).
 if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
+  console.warn("[db] DATABASE_URL non impostata: le query al database falliranno.");
 }
 
 export const pool = new Pool({
