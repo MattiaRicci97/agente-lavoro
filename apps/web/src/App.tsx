@@ -5,6 +5,7 @@ import { useGetMe, getGetMeQueryKey } from "@sillabo/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Home from "./pages/Home";
 import SignIn from "./pages/SignIn";
@@ -58,12 +59,34 @@ function FullScreenLoader() {
   );
 }
 
+function GateError() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background p-6">
+      <div className="max-w-md w-full text-center space-y-4">
+        <h1 className="font-display text-2xl font-semibold text-primary">Server non raggiungibile</h1>
+        <p className="text-muted-foreground">
+          Non riesco a contattare il server di Sillabo. Potrebbe essere un problema temporaneo:
+          riprova tra qualche istante.
+        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="inline-flex items-center justify-center rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground"
+        >
+          Riprova
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function TeacherGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
-  const { data: me, isLoading } = useGetMe({ query: { enabled: isSignedIn, queryKey: getGetMeQueryKey() } });
+  const { data: me, isLoading, isError } = useGetMe({ query: { enabled: isSignedIn, queryKey: getGetMeQueryKey() } });
 
   if (!isLoaded || (isSignedIn && isLoading)) return <FullScreenLoader />;
   if (!isSignedIn) return <Redirect to="/" />;
+  if (isError) return <GateError />;
   if (!me) return <FullScreenLoader />;
   if (!me.role) return <Redirect to="/onboarding" />;
   if (me.role !== "docente") return <Redirect to="/studio" />;
@@ -73,10 +96,11 @@ function TeacherGate({ children }: { children: React.ReactNode }) {
 
 function StudentGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
-  const { data: me, isLoading } = useGetMe({ query: { enabled: isSignedIn, queryKey: getGetMeQueryKey() } });
+  const { data: me, isLoading, isError } = useGetMe({ query: { enabled: isSignedIn, queryKey: getGetMeQueryKey() } });
 
   if (!isLoaded || (isSignedIn && isLoading)) return <FullScreenLoader />;
   if (!isSignedIn) return <Redirect to="/" />;
+  if (isError) return <GateError />;
   if (!me) return <FullScreenLoader />;
   if (!me.role) return <Redirect to="/onboarding" />;
   if (me.role !== "studente") return <Redirect to="/cattedra" />;
@@ -94,8 +118,9 @@ function HomeRedirect() {
 }
 
 function PostLoginRedirect() {
-  const { data: me, isLoading } = useGetMe();
+  const { data: me, isLoading, isError } = useGetMe();
 
+  if (isError) return <GateError />;
   if (isLoading || !me) return <FullScreenLoader />;
   if (!me.role) return <Redirect to="/onboarding" />;
   if (me.role === "docente") return <Redirect to="/cattedra" />;
@@ -226,10 +251,11 @@ function Router() {
 
 function AuthedAllowUnroledGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
-  const { data: me, isLoading } = useGetMe({ query: { enabled: isSignedIn, queryKey: getGetMeQueryKey() } });
+  const { data: me, isLoading, isError } = useGetMe({ query: { enabled: isSignedIn, queryKey: getGetMeQueryKey() } });
 
   if (!isLoaded || (isSignedIn && isLoading)) return <FullScreenLoader />;
   if (!isSignedIn) return <Redirect to="/" />;
+  if (isError) return <GateError />;
   if (me?.role) return <Redirect to="/" />;
 
   return <>{children}</>;
@@ -237,10 +263,11 @@ function AuthedAllowUnroledGate({ children }: { children: React.ReactNode }) {
 
 function StudentJoinGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
-  const { data: me, isLoading } = useGetMe({ query: { enabled: isSignedIn, queryKey: getGetMeQueryKey() } });
+  const { data: me, isLoading, isError } = useGetMe({ query: { enabled: isSignedIn, queryKey: getGetMeQueryKey() } });
 
   if (!isLoaded || (isSignedIn && isLoading)) return <FullScreenLoader />;
   if (!isSignedIn) return <Redirect to="/" />;
+  if (isError) return <GateError />;
   if (!me) return <FullScreenLoader />;
   if (!me.role) return <Redirect to="/onboarding" />;
   if (me.role !== "studente") return <Redirect to="/cattedra" />;
@@ -255,7 +282,9 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <AuthQueryCacheInvalidator />
         <TooltipProvider>
-          <Router />
+          <ErrorBoundary>
+            <Router />
+          </ErrorBoundary>
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>

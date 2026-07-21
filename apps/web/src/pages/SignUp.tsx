@@ -22,17 +22,22 @@ export default function SignUp() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error, needsEmailConfirmation } = await signUp(fullName.trim(), email.trim(), password);
-    setLoading(false);
-    if (error) {
-      setError(error);
-      return;
+    try {
+      const { error, needsEmailConfirmation } = await signUp(fullName.trim(), email.trim(), password);
+      if (error) {
+        setError(error);
+        return;
+      }
+      if (needsEmailConfirmation) {
+        setConfirmationSent(true);
+        return;
+      }
+      setLocation("/");
+    } catch (err: any) {
+      setError(err?.message ?? "Impossibile completare la registrazione. Riprova.");
+    } finally {
+      setLoading(false);
     }
-    if (needsEmailConfirmation) {
-      setConfirmationSent(true);
-      return;
-    }
-    setLocation("/");
   }
 
   if (confirmationSent) {
