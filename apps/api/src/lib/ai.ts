@@ -25,7 +25,12 @@ function extractJson<T>(text: string): T {
   const lastBracket = raw.lastIndexOf("]");
   const end = Math.max(lastBrace, lastBracket);
   const slice = start !== -1 && end !== -1 ? raw.slice(start, end + 1) : raw;
-  return JSON.parse(slice.trim()) as T;
+  try {
+    return JSON.parse(slice.trim()) as T;
+  } catch {
+    // Tipicamente accade quando la risposta e' stata troncata dal limite di token.
+    throw new Error("La risposta dell'AI e' incompleta o non in formato valido. Riprova.");
+  }
 }
 
 export interface GeneratedQuestion {
@@ -232,7 +237,7 @@ export async function gradeWrittenExam(
 
   const message = await getAnthropic().messages.create({
     model: MODEL,
-    max_tokens: 1500,
+    max_tokens: 2048,
     system:
       "Sei un docente italiano che corregge verifiche scritte nel formato reale delle scuole superiori. " +
       `Il formato e': ${label}. ` +
@@ -273,7 +278,9 @@ export async function nextOralExamTurn(
 
   const message = await getAnthropic().messages.create({
     model: MODEL,
-    max_tokens: 1200,
+    // Ampio margine: il turno finale include osservazione + voto + feedback
+    // dettagliato, e una risposta troncata farebbe fallire il parsing.
+    max_tokens: 2500,
     system:
       "Sei un professore italiano che sta facendo un'interrogazione orale a uno studente delle superiori, basata esclusivamente sul materiale fornito. " +
       "Fai una domanda alla volta, incalza con richieste di approfondimento o collegamenti quando la risposta e' vaga, e correggi con garbo ma fermezza gli errori. " +
