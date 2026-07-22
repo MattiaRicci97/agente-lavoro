@@ -1,4 +1,4 @@
-import { PDFParse } from "pdf-parse";
+import { extractText, getDocumentProxy } from "unpdf";
 import mammoth from "mammoth";
 import { downloadObject } from "./storage";
 
@@ -48,13 +48,10 @@ export async function extractTextFromUploadedFile(
 
   let text = "";
   if (isPdf(fileName)) {
-    const parser = new PDFParse({ data: buffer });
-    try {
-      const result = await parser.getText();
-      text = result.text;
-    } finally {
-      await parser.destroy();
-    }
+    // unpdf: estrazione testo pensata per il serverless (niente canvas/DOMMatrix).
+    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    const result = await extractText(pdf, { mergePages: true });
+    text = Array.isArray(result.text) ? result.text.join("\n") : result.text;
   } else {
     const result = await mammoth.extractRawText({ buffer });
     text = result.value;
