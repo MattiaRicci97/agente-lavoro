@@ -81,15 +81,33 @@ async function loadSettings(): Promise<Settings> {
 
 const CONTENT_FIELDS = [
   "id", "title", "rubrica", "formato", "data_pub", "fonti", "cta", "note", "status", "checklist",
+  "url", "views", "ctr", "watch", "subs",
 ];
+const INT_FIELDS = ["views", "subs"];
+const NUM_FIELDS = ["ctr"];
+
+function toNum(v: unknown): number | null {
+  if (v === "" || v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
 
 function pickContent(raw: Record<string, unknown>) {
   const out: Record<string, unknown> = {};
   for (const f of CONTENT_FIELDS) if (f in raw) out[f] = raw[f];
   if (out.data_pub === "") out.data_pub = null;
+  for (const f of INT_FIELDS) if (f in out) { const n = toNum(out[f]); out[f] = n === null ? null : Math.trunc(n); }
+  for (const f of NUM_FIELDS) if (f in out) out[f] = toNum(out[f]);
   out.updated_at = new Date().toISOString();
   return out;
 }
+
+// Avanzamento automatico della pipeline: stadio minimo dopo che un ruolo consegna.
+const STATUS_ORDER = ["idea", "fonti", "scaletta", "script", "produzione", "pubblicato", "riciclo"];
+const ROLE_STATUS: Record<string, string> = {
+  data: "fonti", script: "script", legal: "script",
+  seo: "produzione", social: "produzione", art: "produzione", news: "produzione",
+};
 
 function contentBlock(c: Record<string, unknown> | null): string {
   if (!c) {
@@ -157,7 +175,10 @@ async function runAgent(payload: Record<string, unknown>, settings: Settings) {
     req.tools = [{
       type: webType,
       name: "web_search",
-      max_uses: 6,
+      // Tenuto a 4: ogni ricerca è un round-trip che rielabora tutti i risultati
+      // precedenti (gli input token arrivavano a 170k), allungando molto i tempi.
+      // 4 verifiche restano solide e mantengono l'agente sotto il timeout del gateway.
+      max_uses: 4,
       user_location: { type: "approximate", country: "IT", timezone: "Europe/Rome" },
     }];
   }
@@ -229,7 +250,22 @@ async function runAgent(payload: Record<string, unknown>, settings: Settings) {
       searches,
       sources: uniqSources.length ? uniqSources : null,
     });
-    return json({ run });
+
+    // Avanzamento automatico della pipeline (se attivo e il contenuto non è già pubblicato).
+    let advanced: Record<string, unknown> | null = null;
+    const target = ROLE_STATUS[payload.role as string];
+    if (content && target && settings.auto_advance !== "off") {
+      const cur = STATUS_ORDER.indexOf(String(content.status));
+      const tgt = STATUS_ORDER.indexOf(target);
+      const pub = STATUS_ORDER.indexOf("pubblicato");
+      if (cur >= 0 && tgt > cur && cur < pub) {
+        const { data } = await db.from("contents")
+          .update({ status: target, updated_at: new Date().toISOString() })
+          .eq("id", content.id).select().single();
+        advanced = data;
+      }
+    }
+    return json({ run, content: advanced });
   } catch (e) {
     const message = e instanceof Anthropic.AuthenticationError
       ? "Chiave API non valida: controlla la chiave in Impostazioni."
@@ -290,6 +326,7 @@ Deno.serve(async (req) => {
           settings: {
             model: settings.model || "claude-opus-4-8",
             has_api_key: Boolean(settings.anthropic_api_key),
+            auto_advance: settings.auto_advance !== "off",
           },
         });
       }
@@ -333,6 +370,9 @@ Deno.serve(async (req) => {
         }
         if (typeof payload.anthropic_api_key === "string" && payload.anthropic_api_key.trim()) {
           updates.push({ key: "anthropic_api_key", value: payload.anthropic_api_key.trim() });
+        }
+        if (typeof payload.auto_advance === "boolean") {
+          updates.push({ key: "auto_advance", value: payload.auto_advance ? "on" : "off" });
         }
         if (updates.length) {
           const { error } = await db.from("settings").upsert(updates);

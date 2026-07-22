@@ -252,7 +252,7 @@ const MODELS = [
 
 /* ============ STATO E API ============ */
 let KEY = localStorage.getItem(KEY_STORE) || "";
-let S = { view:"oggi", loaded:false, contents:[], ideas:[], runs:[], settings:{model:"claude-opus-4-8",has_api_key:false}, teamSel:"", running:{}, archRole:"", archQ:"", chain:null, chainOpen:false };
+let S = { view:"oggi", loaded:false, contents:[], ideas:[], runs:[], settings:{model:"claude-opus-4-8",has_api_key:false,auto_advance:true}, teamSel:"", running:{}, archRole:"", archQ:"", chain:null, chainOpen:false };
 
 // Catena "Pacchetto completo": ordine canonico della pipeline e default per formato.
 const CHAIN_ORDER = ["capo","script","data","legal","seo","social","news","art"];
@@ -309,6 +309,11 @@ function atRisk(c){
   return (d<=1&&i<4)||(d<=3&&i<3)||(d<=5&&i<2);
 }
 function roleOf(id){return ROLES.find(r=>r.id===id)||{emoji:"🤖",name:id}}
+function applyAdvance(res){
+  if(res&&res.content){const i=S.contents.findIndex(x=>x.id===res.content.id);if(i>=0)S.contents[i]=res.content;return true}
+  return false;
+}
+function fmtNum(n){return (n===null||n===undefined||n==="")?"—":Number(n).toLocaleString("it-IT")}
 function rubricaChip(r){const info=RUBRICHE[r]||RUBRICHE["Mix"];
   return `<span class="chip"><span class="dot" style="background:${info.c}"></span>${esc(r)}</span>`}
 function statusChip(c){
@@ -401,7 +406,14 @@ function renderOggi(){
   const prossimi=S.contents.filter(c=>{const n=daysTo(c.data_pub);return n!==null&&n>0&&n<=7&&!isDone(c)})
     .sort((a,b)=>a.data_pub<b.data_pub?-1:1);
   const inLav=S.contents.filter(c=>!isDone(c)&&c.status!=="idea").length;
-  const pubbl=S.contents.filter(isDone).length;
+  const pubblicati=S.contents.filter(isDone);
+  const pubbl=pubblicati.length;
+  const withM=pubblicati.filter(c=>c.views!=null||c.ctr!=null||c.subs!=null||c.url)
+    .sort((a,b)=>(Number(b.views)||0)-(Number(a.views)||0));
+  const totViews=withM.reduce((a,c)=>a+(Number(c.views)||0),0);
+  const totSubs=withM.reduce((a,c)=>a+(Number(c.subs)||0),0);
+  const ctrs=withM.filter(c=>c.ctr!=null).map(c=>Number(c.ctr));
+  const avgCtr=ctrs.length?(ctrs.reduce((a,b)=>a+b,0)/ctrs.length):null;
   const prossima=S.contents.filter(c=>{const n=daysTo(c.data_pub);return n!==null&&n>=0&&!isDone(c)})
     .sort((a,b)=>a.data_pub<b.data_pub?-1:1)[0];
 
@@ -450,6 +462,17 @@ function renderOggi(){
   <div class="sect"><h2>Prossimi 7 giorni</h2><span class="mutex">con segnalazione dei contenuti a rischio</span></div>
   ${prossimi.length?`<div class="card">${prossimi.map(rowItem).join("")}</div>`
     :`<div class="empty-note">Niente in programma nei prossimi 7 giorni. Apri il Calendario e riempi gli slot della settimana.</div>`}
+  ${withM.length?`<div class="sect"><h2>Andamento</h2><span class="mutex">i contenuti pubblicati e i loro numeri</span></div>
+  <div class="tiles">
+    <div class="tile"><div class="lab">Visualizzazioni totali</div><div class="val">${fmtNum(totViews)}</div></div>
+    <div class="tile"><div class="lab">CTR medio</div><div class="val">${avgCtr!=null?avgCtr.toFixed(1)+"%":"—"}</div></div>
+    <div class="tile"><div class="lab">Iscritti guadagnati</div><div class="val">${fmtNum(totSubs)}</div></div>
+    <div class="tile"><div class="lab">Con metriche</div><div class="val">${withM.length}/${pubbl}</div></div>
+  </div>
+  <div class="card">${withM.map(c=>`<div class="row-item" data-open="${c.id}">
+    <div style="min-width:0"><div class="t">${esc(c.title)}</div>
+    <div class="meta">${rubricaChip(c.rubrica)}<span class="chip">${esc(c.formato)}</span>${c.url?`<a href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" class="chip" style="color:var(--teal)" onclick="event.stopPropagation()">↗ apri</a>`:""}</div></div>
+    <div class="when" style="font-variant-numeric:tabular-nums">${fmtNum(c.views)} view${c.ctr!=null?`<br><span class="mutex">CTR ${Number(c.ctr).toFixed(1)}%</span>`:""}</div></div>`).join("")}</div>`:""}
   <div class="sect"><h2>Idea al volo</h2></div>
   <div class="card"><form id="quick-idea" style="display:flex;gap:8px;flex-wrap:wrap">
     <input name="text" placeholder="Es. Il periodo di prova spiegato in 60 secondi…" style="flex:1;min-width:200px" required>
@@ -605,17 +628,48 @@ function openWork(roleId){
     startWork(roleId,c,extra);
   });
 }
+// Gli agenti con ricerca web (specie il Caporedattore, che è aperto e strategico)
+// possono lavorare 1-2 minuti: la connessione col gateway può scadere PRIMA che
+// la risposta torni, anche se il server ha finito e ha già salvato il lavoro.
+// In quel caso non mostriamo un errore secco: ricarichiamo lo stato e recuperiamo
+// il run appena salvato. Torna il run recuperato, oppure null se davvero non c'è.
+async function recoverRun(roleId,contentId,since){
+  for(const wait of [2000,9000,15000,20000]){
+    await new Promise(r=>setTimeout(r,wait));
+    try{
+      await loadState();
+      const hit=S.runs.find(r=>r.role===roleId
+        && (r.content_id||null)===(contentId||null)
+        && r.status==="ok"
+        && new Date(r.created_at).getTime()>=since-5000);
+      if(hit){
+        // state.get non porta il testo: recuperiamo il run completo (con output e fonti)
+        // così la catena può passarlo come priors ai passaggi successivi.
+        try{const {run}=await api("run.get",{id:hit.id});Object.assign(hit,run);}catch(e){}
+        return hit;
+      }
+    }catch(e){/* riprova al prossimo giro */}
+  }
+  return null;
+}
 async function startWork(roleId,c,extra){
   const role=roleOf(roleId);
+  const started=Date.now();
   S.running[roleId]=true;
   if(S.view==="team")render();
   toast(role.emoji+" "+role.name+" è al lavoro — puoi avviare altri agenti nel frattempo");
   try{
-    const {run}=await api("agent.run",{role:roleId,content_id:c?c.id:null,extra});
-    S.runs.unshift(run);
-    toast(role.emoji+" "+role.name+" ha finito: trovi il lavoro nell'Archivio");
+    const res=await api("agent.run",{role:roleId,content_id:c?c.id:null,extra});
+    S.runs.unshift(res.run);
+    if(applyAdvance(res))toast("Pipeline avanzata → "+STATUSES[statusIdx(res.content.status)].label);
+    else toast(role.emoji+" "+role.name+" ha finito: trovi il lavoro nell'Archivio");
   }catch(err){
-    toast(role.name+": "+(err.message||"errore"),true);
+    // La richiesta può scadere sul gateway mentre l'agente sta ancora lavorando:
+    // proviamo a recuperare il lavoro che nel frattempo il server ha salvato.
+    toast(role.name+" ci sta mettendo di più del solito — controllo se ha finito…");
+    const rec=await recoverRun(roleId,c?c.id:null,started);
+    if(rec)toast(role.emoji+" "+role.name+" ha finito: trovi il lavoro nell'Archivio");
+    else toast(role.name+": "+(err.message||"errore")+" — riprova tra poco",true);
   }finally{
     delete S.running[roleId];
     if(S.view==="team"||S.view==="archivio")render();
@@ -682,13 +736,21 @@ function chainPriors(upto){
 }
 async function runChainStep(i){
   const st=S.chain.steps[i];
+  const started=Date.now();
   st.status="run";refreshChain();
   try{
-    const {run}=await api("agent.run",{role:st.role,content_id:S.chain.contentId,chain_id:S.chain.chainId,priors:chainPriors(i)});
+    const res=await api("agent.run",{role:st.role,content_id:S.chain.contentId,chain_id:S.chain.chainId,priors:chainPriors(i)});
+    const run=res.run;
     S.runs.unshift(run);
+    applyAdvance(res);
     st.status=run.status==="error"?"error":"done";st.runId=run.id;st.output=run.output||"";
   }catch(err){
-    st.status="error";toast(roleOf(st.role).name+": "+(err.message||"errore"),true);
+    // Timeout del gateway su un agente lento (tipico del Caporedattore in testa
+    // alla catena): il server può aver finito lo stesso. Recuperiamo il run così
+    // la catena prosegue con i priors giusti invece di rompersi al primo passo.
+    const rec=await recoverRun(st.role,S.chain.contentId,started);
+    if(rec){st.status="done";st.runId=rec.id;st.output=rec.output||"";}
+    else{st.status="error";toast(roleOf(st.role).name+": "+(err.message||"errore"),true);}
   }
   refreshChain();
 }
@@ -863,10 +925,22 @@ function renderImpostazioni(){
     </form>
   </div>
   <div class="card">
+    <h3>Avanzamento automatico della pipeline</h3>
+    <p class="muted" style="font-size:13.5px;margin:6px 0 12px">Quando un agente consegna, il contenuto avanza da solo allo stadio giusto (Sceneggiatore → Script, SEO/Social/Art → Produzione, Data Analyst → Fonti). Mai indietro, mai oltre Pubblicato.</p>
+    <label class="check ${S.settings.auto_advance?"on":""}" style="font-size:14px"><input type="checkbox" id="aa-toggle" ${S.settings.auto_advance?"checked":""}> Avanza automaticamente i contenuti in pipeline</label>
+  </div>
+  <div class="card">
     <h3>Accesso</h3>
     <p class="muted" style="font-size:13.5px;margin:6px 0 12px">Questa app è protetta dalla tua password di redazione. Se la cambi (nel database), dovrai riaccedere.</p>
     <button class="btn danger" id="do-logout">Esci dalla redazione</button>
   </div>`;
+  $("#aa-toggle").addEventListener("change",async e=>{
+    const on=e.target.checked;
+    e.target.closest(".check").classList.toggle("on",on);
+    try{await api("settings.save",{auto_advance:on});S.settings.auto_advance=on;
+      toast(on?"Avanzamento automatico attivo":"Avanzamento automatico disattivato");
+    }catch(err){e.target.checked=!on;fail(err)}
+  });
   $("#key-form").addEventListener("submit",async e=>{
     e.preventDefault();
     const k=e.target.key.value.trim();
@@ -899,7 +973,8 @@ function closeModal(){$("#overlay").innerHTML="";S.chainOpen=false}
 function newContent(preset){
   return {id:crypto.randomUUID(),title:"",rubrica:"Basi di Lavoro",
     formato:(preset&&preset.formato)||"Mini-lezione 5′",data_pub:(preset&&preset.date)||null,
-    fonti:"",cta:"",note:"",status:"idea",checklist:WORKFLOW.map(()=>false)};
+    fonti:"",cta:"",note:"",status:"idea",checklist:WORKFLOW.map(()=>false),
+    url:"",views:null,ctr:null,watch:"",subs:null};
 }
 async function saveContent(c,isNew){
   const {content}=await api("content.save",{content:c});
@@ -928,6 +1003,14 @@ function openEditor(id,preset){
   ${isNew?"":`<div style="margin-top:16px"><span class="field-label">Flusso di lavoro · ${done}/${WORKFLOW.length}</span>
     <div class="bar"><i style="width:${Math.round(done/WORKFLOW.length*100)}%"></i></div>
     ${WORKFLOW.map((w,i)=>`<label class="check ${c.checklist[i]?"on":""}"><input type="checkbox" data-chk="${i}" ${c.checklist[i]?"checked":""}>${esc(w)}</label>`).join("")}</div>`}
+  ${isNew?"":`<div style="margin-top:16px"><span class="field-label">📊 Metriche (dopo la pubblicazione)</span>
+    <div class="frm" style="margin-top:6px">
+      <div class="full"><input id="m-url" name="url" value="${esc(c.url||"")}" placeholder="Link del video / post pubblicato"></div>
+      <div><input id="m-views" name="views" type="number" min="0" value="${c.views??""}" placeholder="Visualizzazioni"></div>
+      <div><input id="m-ctr" name="ctr" type="number" step="0.1" min="0" value="${c.ctr??""}" placeholder="CTR %"></div>
+      <div><input id="m-watch" name="watch" value="${esc(c.watch||"")}" placeholder="Watch-time medio (es. 3:40)"></div>
+      <div><input id="m-subs" name="subs" type="number" value="${c.subs??""}" placeholder="Iscritti guadagnati"></div>
+    </div></div>`}
   ${myRuns.length?`<div style="margin-top:16px"><span class="field-label">Lavori del Team AI · ${myRuns.length}</span>
     ${myRuns.map(runRow).join("")}</div>`:""}
   <div class="modal-foot">
@@ -959,6 +1042,13 @@ function openEditor(id,preset){
     c.title=f.title.value.trim();c.rubrica=f.rubrica.value;c.formato=f.formato.value;
     c.data_pub=f.data_pub.value||null;c.status=f.status.value;c.fonti=f.fonti.value.trim();
     c.cta=f.cta.value.trim();c.note=f.note.value.trim();
+    if(!isNew){
+      c.url=($("#m-url").value||"").trim();
+      c.views=$("#m-views").value===""?null:Number($("#m-views").value);
+      c.ctr=$("#m-ctr").value===""?null:Number($("#m-ctr").value);
+      c.watch=($("#m-watch").value||"").trim();
+      c.subs=$("#m-subs").value===""?null:Number($("#m-subs").value);
+    }
     try{
       await saveContent(c,isNew);
       closeModal();render();toast(isNew?"Contenuto in pipeline":"Salvato");
