@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LogOut, BookMarked, CalendarClock, UserCircle, PiggyBank } from "lucide-react";
+import { LogOut, BookMarked, CalendarClock, UserCircle, PiggyBank, ScanLine } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
@@ -52,6 +52,7 @@ export function StudentLayout({ children }: { children: React.ReactNode }) {
           <nav className="flex items-center gap-1">
             <NavLink href="/studio" icon={BookMarked} label="Materiali" active={location === "/studio"} />
             <NavLink href="/studio/ripasso" icon={CalendarClock} label="Ripasso" active={location === "/studio/ripasso"} />
+            <NavLink href="/studio/foto" icon={ScanLine} label="Correggi" active={location === "/studio/foto"} />
             <NavLink
               href="/studio/finanza"
               icon={PiggyBank}
