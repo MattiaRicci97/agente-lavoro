@@ -40,6 +40,7 @@ const APP_TABLES = [
   "module_lessons",
   "module_questions",
   "module_lesson_progress",
+  "photo_corrections",
 ];
 
 const MODULE_CATALOG: Array<{

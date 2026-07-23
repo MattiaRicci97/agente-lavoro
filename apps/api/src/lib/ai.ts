@@ -371,3 +371,63 @@ export async function askStudyTutor(
   }
   return textBlock.text.trim();
 }
+
+export interface PhotoCorrectionResult {
+  transcription: string;
+  grade: number | null;
+  feedback: string;
+  strengths: string[];
+  improvements: string[];
+}
+
+export type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+/**
+ * Corregge un compito scritto a mano fotografato usando la visione di Claude:
+ * legge la grafia, valuta, assegna un voto e dà feedback costruttivo.
+ */
+export async function correctPhotoHomework(
+  imageBase64: string,
+  mediaType: ImageMediaType,
+  subject: string,
+  gradeLevel: string,
+  assignmentPrompt: string | null,
+): Promise<PhotoCorrectionResult> {
+  const consegna = assignmentPrompt?.trim()
+    ? `La consegna del compito era: "${assignmentPrompt.trim()}".`
+    : "La consegna non e' stata specificata: deducila dal contenuto.";
+
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 2048,
+    system:
+      "Sei un docente italiano che corregge il compito scritto a mano di uno studente, fotografato e inviato come immagine. " +
+      "Prima trascrivi fedelmente cio' che riesci a leggere nella foto (segnala con [illeggibile] le parti che non distingui). " +
+      "Poi correggi: valuta la correttezza dei contenuti e, dove pertinente, forma ed esposizione, in modo adeguato al livello scolastico. " +
+      "Assegna un voto in decimi (da 1 a 10) e un feedback costruttivo e incoraggiante in italiano, come farebbe un vero insegnante. " +
+      "Sii equo: se la foto e' poco leggibile o incompleta, dillo e valuta solo cio' che vedi. Rispondi SOLO con JSON valido.",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mediaType, data: imageBase64 },
+          },
+          {
+            type: "text",
+            text:
+              `Materia: ${subject}\nLivello scolastico: ${gradeLevel || "non specificato"}\n${consegna}\n\n` +
+              `Correggi questo compito e rispondi con JSON: {"transcription": "cosa hai letto nella foto", "grade": numero_da_1_a_10_o_null, "feedback": "valutazione complessiva", "strengths": ["punto di forza", ...], "improvements": ["cosa migliorare", ...]}`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("Anthropic non ha restituito testo");
+  }
+  return extractJson<PhotoCorrectionResult>(textBlock.text);
+}

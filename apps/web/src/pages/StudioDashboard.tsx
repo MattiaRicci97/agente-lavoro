@@ -4,7 +4,7 @@ import { timeGreeting, firstName } from "@/lib/greeting";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { BookOpen, BrainCircuit, PlayCircle, FileText, GraduationCap } from "lucide-react";
+import { BookOpen, BrainCircuit, PlayCircle, FileText, GraduationCap, ScanLine, ArrowRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
 
@@ -26,6 +26,21 @@ export default function StudioDashboard() {
             Cosa studiamo oggi? Scegli un argomento e mettiti alla prova con quiz e simulazioni.
           </p>
         </div>
+
+        <Link href="/studio/foto">
+          <div className="group hover-elevate flex cursor-pointer items-center gap-4 rounded-2xl border border-secondary/20 bg-gradient-to-r from-secondary/10 to-secondary/5 p-5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-secondary/15 text-secondary">
+              <ScanLine className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-display text-lg font-semibold text-secondary">Correggi un compito da una foto</h3>
+              <p className="text-sm text-muted-foreground">
+                Fotografa il compito scritto a mano: l'AI lo legge, lo corregge e ti dà voto e consigli.
+              </p>
+            </div>
+            <ArrowRight className="h-5 w-5 shrink-0 text-secondary transition-transform group-hover:translate-x-0.5" />
+          </div>
+        </Link>
 
         {isLoading ? (
           <div className="grid gap-6 md:grid-cols-2">
