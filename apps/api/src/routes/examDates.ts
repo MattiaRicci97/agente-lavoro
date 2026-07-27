@@ -12,6 +12,7 @@ import {
 } from "@sillabo/db";
 import { requireAuth, requireTeacher } from "../middlewares/auth";
 import { announceToClasses } from "../lib/classFeed";
+import { teacherClassIds, isClassTeacher } from "../lib/classAccess";
 
 const router: IRouter = Router();
 
@@ -25,10 +26,13 @@ const CreateExamDateSchema = z.object({
 
 /** Elenco verifiche per il docente (tutte le sue classi). */
 router.get("/exam-dates", requireTeacher, async (req, res): Promise<void> => {
-  const classes = await db
-    .select({ id: classesTable.id, name: classesTable.name })
-    .from(classesTable)
-    .where(eq(classesTable.teacherId, req.teacher!.id));
+  const ids = await teacherClassIds(req.teacher!.id);
+  const classes = ids.length
+    ? await db
+        .select({ id: classesTable.id, name: classesTable.name })
+        .from(classesTable)
+        .where(inArray(classesTable.id, ids))
+    : [];
 
   if (!classes.length) {
     res.json([]);
@@ -55,8 +59,8 @@ router.post("/exam-dates", requireTeacher, async (req, res): Promise<void> => {
   const [cls] = await db
     .select()
     .from(classesTable)
-    .where(and(eq(classesTable.id, parsed.data.classId), eq(classesTable.teacherId, req.teacher!.id)));
-  if (!cls) {
+    .where(eq(classesTable.id, parsed.data.classId));
+  if (!cls || !(await isClassTeacher(req.teacher!.id, parsed.data.classId))) {
     res.status(404).json({ error: "Classe non trovata" });
     return;
   }
@@ -98,12 +102,11 @@ router.delete("/exam-dates/:id", requireTeacher, async (req, res): Promise<void>
   }
 
   const [row] = await db
-    .select({ examId: examDatesTable.id, teacherId: classesTable.teacherId })
+    .select({ examId: examDatesTable.id, classId: examDatesTable.classId })
     .from(examDatesTable)
-    .innerJoin(classesTable, eq(classesTable.id, examDatesTable.classId))
     .where(eq(examDatesTable.id, id));
 
-  if (!row || row.teacherId !== req.teacher!.id) {
+  if (!row || !(await isClassTeacher(req.teacher!.id, row.classId))) {
     res.status(404).json({ error: "Verifica non trovata" });
     return;
   }

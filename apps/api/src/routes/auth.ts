@@ -1,6 +1,13 @@
 import { Router, type IRouter } from "express";
 import { eq, and, isNull, inArray, sql } from "drizzle-orm";
-import { db, teachersTable, studentsTable, classesTable, classJoinRequestsTable } from "@sillabo/db";
+import {
+  db,
+  teachersTable,
+  studentsTable,
+  classesTable,
+  classTeachersTable,
+  classJoinRequestsTable,
+} from "@sillabo/db";
 import {
   GetMeResponse,
   SetRoleBody,
@@ -14,6 +21,7 @@ import {
 } from "@sillabo/api-zod";
 import { requireAuth, requireTeacher, type AuthUser } from "../middlewares/auth";
 import { updateUserMetadata } from "../lib/supabase";
+import { teacherClassIds } from "../lib/classAccess";
 
 const router: IRouter = Router();
 
@@ -103,10 +111,19 @@ router.post("/onboarding/role", requireAuth, async (req, res): Promise<void> => 
 
       if (count === 0) {
         req.log.info({ teacherId: teacher.id }, "First teacher registered, claiming unowned legacy classes");
-        await db
+        const adopted = await db
           .update(classesTable)
           .set({ teacherId: teacher.id, teacherName: name })
-          .where(isNull(classesTable.teacherId));
+          .where(isNull(classesTable.teacherId))
+          .returning({ id: classesTable.id });
+        if (adopted.length) {
+          await db
+            .insert(classTeachersTable)
+            .values(
+              adopted.map((c) => ({ classId: c.id, teacherId: teacher.id, role: "coordinatore" })),
+            )
+            .onConflictDoNothing();
+        }
       }
     }
   }
@@ -198,7 +215,7 @@ router.get("/join-requests", requireTeacher, async (req, res): Promise<void> => 
     })
     .from(classJoinRequestsTable)
     .innerJoin(classesTable, eq(classesTable.id, classJoinRequestsTable.classId))
-    .where(eq(classesTable.teacherId, req.teacher!.id));
+    .where(inArray(classesTable.id, await teacherClassIds(req.teacher!.id)));
 
   res.json(ListJoinRequestsResponse.parse(rows));
 });
@@ -214,7 +231,8 @@ router.post("/join-requests/:id/approve", requireTeacher, async (req, res): Prom
     .select()
     .from(classJoinRequestsTable)
     .innerJoin(classesTable, eq(classesTable.id, classJoinRequestsTable.classId))
-    .where(and(eq(classJoinRequestsTable.id, id), eq(classesTable.teacherId, req.teacher!.id)));
+    .innerJoin(classTeachersTable, eq(classTeachersTable.classId, classesTable.id))
+    .where(and(eq(classJoinRequestsTable.id, id), eq(classTeachersTable.teacherId, req.teacher!.id)));
 
   if (!request) {
     res.status(404).json({ error: "Richiesta non trovata" });
@@ -261,7 +279,8 @@ router.post("/join-requests/:id/reject", requireTeacher, async (req, res): Promi
     .select()
     .from(classJoinRequestsTable)
     .innerJoin(classesTable, eq(classesTable.id, classJoinRequestsTable.classId))
-    .where(and(eq(classJoinRequestsTable.id, id), eq(classesTable.teacherId, req.teacher!.id)));
+    .innerJoin(classTeachersTable, eq(classTeachersTable.classId, classesTable.id))
+    .where(and(eq(classJoinRequestsTable.id, id), eq(classTeachersTable.teacherId, req.teacher!.id)));
 
   if (!request) {
     res.status(404).json({ error: "Richiesta non trovata" });

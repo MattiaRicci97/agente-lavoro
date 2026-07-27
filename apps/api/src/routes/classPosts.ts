@@ -12,6 +12,7 @@ import {
 } from "@sillabo/db";
 import { requireAuth, requireTeacher } from "../middlewares/auth";
 import { draftClassNotice } from "../lib/ai";
+import { teacherClassIds, isClassTeacher } from "../lib/classAccess";
 
 const router: IRouter = Router();
 
@@ -43,15 +44,6 @@ const DraftSchema = z.object({
   classId: z.number().int().positive(),
   hint: z.string().trim().min(3).max(1000),
 });
-
-/** Classi di cui il docente e' titolare. */
-async function teacherClassIds(teacherId: number): Promise<number[]> {
-  const rows = await db
-    .select({ id: classesTable.id })
-    .from(classesTable)
-    .where(eq(classesTable.teacherId, teacherId));
-  return rows.map((r) => r.id);
-}
 
 /** Iscrizioni dello studente autenticato. */
 async function studentMemberships(authUserId: string) {
@@ -486,8 +478,8 @@ router.post("/class-posts/draft", requireTeacher, async (req, res): Promise<void
   const [cls] = await db
     .select()
     .from(classesTable)
-    .where(and(eq(classesTable.id, parsed.data.classId), eq(classesTable.teacherId, req.teacher!.id)));
-  if (!cls) {
+    .where(eq(classesTable.id, parsed.data.classId));
+  if (!cls || !(await isClassTeacher(req.teacher!.id, parsed.data.classId))) {
     res.status(404).json({ error: "Classe non trovata" });
     return;
   }

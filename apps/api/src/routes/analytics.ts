@@ -19,6 +19,7 @@ import {
 import { attachClassIds } from "../lib/materialClasses";
 import { teacherCanManageMaterial, teacherMaterialIds } from "../lib/materialAccess";
 import { requireTeacher } from "../middlewares/auth";
+import { teacherClassIds } from "../lib/classAccess";
 
 const router: IRouter = Router();
 
@@ -30,7 +31,7 @@ router.get("/teacher/alerts", requireTeacher, async (req, res): Promise<void> =>
   const classes = await db
     .select({ id: classesTable.id, name: classesTable.name })
     .from(classesTable)
-    .where(eq(classesTable.teacherId, req.teacher!.id));
+    .where(inArray(classesTable.id, await teacherClassIds(req.teacher!.id)));
 
   if (!classes.length) {
     res.json({ students: [] });

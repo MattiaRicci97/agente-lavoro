@@ -30,6 +30,7 @@ interface Entry {
   title: string;
   grade: number | null;
   feedback: string | null;
+  signedBy: string | null;
 }
 
 interface Note {
@@ -194,7 +195,7 @@ export default function CattedraStudente() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Valutazioni firmate</CardTitle>
             <CardDescription>
-              Solo le prove che hai validato tu. Quelle in attesa restano in "Da validare".
+              Le prove firmate dal consiglio di classe. Quelle ancora in attesa restano in "Da validare".
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -214,6 +215,9 @@ export default function CattedraStudente() {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-medium text-muted-foreground">{meta.label}</span>
                           <span className="text-xs text-muted-foreground">· {e.subject}</span>
+                          {e.signedBy && (
+                            <span className="text-xs text-muted-foreground">· firmato da {e.signedBy}</span>
+                          )}
                           <span className="ml-auto text-xs text-muted-foreground">
                             {new Date(e.date).toLocaleDateString("it-IT")}
                           </span>

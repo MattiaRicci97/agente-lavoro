@@ -24,6 +24,7 @@ const APP_TABLES = [
   "institutions",
   "teachers",
   "classes",
+  "class_teachers",
   "students",
   "student_notes",
   "class_join_requests",
@@ -343,7 +344,23 @@ async function main() {
     }
     console.log(`✓ RLS abilitata su ${APP_TABLES.length} tabelle`);
 
-    // 1-bis. I materiali caricati prima dell'introduzione dell'autore non hanno
+    // 1-bis. Prima del consiglio di classe una classe apparteneva a un solo
+    // docente (classes.teacher_id). Quel docente diventa il coordinatore, cosi'
+    // non perde l'accesso alle proprie classi.
+    const { rowCount: coordinators } = await client.query(`
+      INSERT INTO class_teachers (class_id, teacher_id, role)
+      SELECT c.id, c.teacher_id, 'coordinatore'
+        FROM classes c
+       WHERE c.teacher_id IS NOT NULL
+      ON CONFLICT (class_id, teacher_id) DO NOTHING
+    `);
+    console.log(
+      coordinators
+        ? `✓ Consiglio di classe: ${coordinators} docenti diventati coordinatori`
+        : "✓ Consiglio di classe già popolato",
+    );
+
+    // 1-ter. I materiali caricati prima dell'introduzione dell'autore non hanno
     // un docente proprietario: senza di lui resterebbero invisibili a tutti.
     // Li assegna al docente titolare della prima classe a cui sono collegati.
     const { rowCount: adopted } = await client.query(`

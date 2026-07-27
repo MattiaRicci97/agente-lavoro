@@ -12,6 +12,7 @@ import {
   writtenExamSubmissionsTable,
 } from "@sillabo/db";
 import { requireTeacher } from "../middlewares/auth";
+import { teacherClassIds } from "../lib/classAccess";
 
 const router: IRouter = Router();
 
@@ -19,15 +20,6 @@ const ValidateSchema = z.object({
   grade: z.number().int().min(1).max(10).nullable(),
   feedback: z.string().trim().max(4000).optional().default(""),
 });
-
-/** Id delle classi del docente autenticato. */
-async function teacherClassIds(teacherId: number): Promise<number[]> {
-  const rows = await db
-    .select({ id: classesTable.id })
-    .from(classesTable)
-    .where(eq(classesTable.teacherId, teacherId));
-  return rows.map((r) => r.id);
-}
 
 /**
  * Proposte di valutazione in attesa del visto del docente.
