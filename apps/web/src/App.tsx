@@ -20,11 +20,13 @@ import CattedraValidazioni from "./pages/CattedraValidazioni";
 import CattedraNuovo from "./pages/CattedraNuovo";
 import CattedraMaterial from "./pages/CattedraMaterial";
 import CattedraDomande from "./pages/CattedraDomande";
+import CattedraBacheca from "./pages/CattedraBacheca";
 import CattedraIstituto from "./pages/CattedraIstituto";
 import CattedraLicenza from "./pages/CattedraLicenza";
 import CattedraModuli from "./pages/CattedraModuli";
 import CattedraRichieste from "./pages/CattedraRichieste";
 import StudioDashboard from "./pages/StudioDashboard";
+import StudioBacheca from "./pages/StudioBacheca";
 import StudioQuiz from "./pages/StudioQuiz";
 import StudioOrale from "./pages/StudioOrale";
 import StudioScritto from "./pages/StudioScritto";
@@ -176,6 +178,11 @@ function Router() {
           <CattedraValidazioni />
         </TeacherGate>
       </Route>
+      <Route path="/cattedra/bacheca">
+        <TeacherGate>
+          <CattedraBacheca />
+        </TeacherGate>
+      </Route>
       <Route path="/cattedra/nuovo">
         <TeacherGate>
           <CattedraNuovo />
@@ -215,6 +222,11 @@ function Router() {
       <Route path="/studio">
         <StudentGate>
           <StudioDashboard />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/bacheca">
+        <StudentGate>
+          <StudioBacheca />
         </StudentGate>
       </Route>
       <Route path="/studio/ripasso">

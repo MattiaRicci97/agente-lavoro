@@ -11,6 +11,7 @@ import {
   reviewItemsTable,
 } from "@sillabo/db";
 import { requireAuth, requireTeacher } from "../middlewares/auth";
+import { announceToClasses } from "../lib/classFeed";
 
 const router: IRouter = Router();
 
@@ -70,6 +71,21 @@ router.post("/exam-dates", requireTeacher, async (req, res): Promise<void> => {
       examDate: parsed.data.examDate,
     })
     .returning();
+
+  await announceToClasses({
+    classIds: [parsed.data.classId],
+    teacherId: req.teacher!.id,
+    authorName: req.teacher!.name,
+    kind: "verifica",
+    title: `Verifica di ${parsed.data.subject}: ${parsed.data.title}`,
+    body: `Si svolgerà il ${new Date(`${parsed.data.examDate}T00:00:00`).toLocaleDateString("it-IT", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    })}.`,
+    examDateId: created.id,
+    materialId: parsed.data.materialId ?? null,
+  });
 
   res.status(201).json({ ...created, className: cls.name });
 });

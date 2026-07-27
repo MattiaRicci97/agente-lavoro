@@ -4,6 +4,7 @@ export * from "./teachers";
 export * from "./classes";
 export * from "./students";
 export * from "./classJoinRequests";
+export * from "./classPosts";
 export * from "./materials";
 export * from "./questions";
 export * from "./quizAttempts";

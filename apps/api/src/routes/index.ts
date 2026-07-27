@@ -19,6 +19,7 @@ import tutorRouter from "./tutor";
 import photoCorrectionRouter from "./photoCorrection";
 import validationsRouter from "./validations";
 import institutionMembersRouter from "./institutionMembers";
+import classPostsRouter from "./classPosts";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(tutorRouter);
 router.use(photoCorrectionRouter);
 router.use(validationsRouter);
 router.use(institutionMembersRouter);
+router.use(classPostsRouter);
 
 export default router;

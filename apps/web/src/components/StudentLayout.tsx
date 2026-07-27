@@ -1,6 +1,8 @@
 import { Link, useLocation } from "wouter";
-import { LogOut, BookMarked, CalendarClock, UserCircle, PiggyBank, ScanLine } from "lucide-react";
+import { LogOut, BookMarked, CalendarClock, UserCircle, PiggyBank, ScanLine, Megaphone } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { customFetch } from "@sillabo/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/lib/auth";
@@ -11,22 +13,29 @@ function NavLink({
   icon: Icon,
   label,
   active,
+  badge,
 }: {
   href: string;
   icon: LucideIcon;
   label: string;
   active: boolean;
+  badge?: number;
 }) {
   return (
     <Link href={href}>
       <div
         className={cn(
-          "hover-elevate flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+          "hover-elevate relative flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
           active ? "bg-secondary/12 text-secondary" : "text-muted-foreground hover:text-foreground",
         )}
       >
         <Icon className="h-4 w-4" />
         <span className="hidden sm:inline">{label}</span>
+        {badge && badge > 0 ? (
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-semibold text-secondary-foreground">
+            {badge}
+          </span>
+        ) : null}
       </div>
     </Link>
   );
@@ -35,6 +44,11 @@ function NavLink({
 export function StudentLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { signOut } = useAuth();
+
+  const { data: unread } = useQuery({
+    queryKey: ["unreadPosts"],
+    queryFn: () => customFetch<{ unread: number }>("/api/class-posts/unread-count", { responseType: "json" }),
+  });
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/40">
@@ -51,6 +65,13 @@ export function StudentLayout({ children }: { children: React.ReactNode }) {
 
           <nav className="flex items-center gap-1">
             <NavLink href="/studio" icon={BookMarked} label="Materiali" active={location === "/studio"} />
+            <NavLink
+              href="/studio/bacheca"
+              icon={Megaphone}
+              label="Bacheca"
+              active={location === "/studio/bacheca"}
+              badge={unread?.unread ?? 0}
+            />
             <NavLink href="/studio/ripasso" icon={CalendarClock} label="Ripasso" active={location === "/studio/ripasso"} />
             <NavLink href="/studio/foto" icon={ScanLine} label="Correggi" active={location === "/studio/foto"} />
             <NavLink
