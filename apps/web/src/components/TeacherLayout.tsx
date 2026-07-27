@@ -9,6 +9,7 @@ import {
   UserCircle,
   Sparkles,
   Stamp,
+  KeyRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,7 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
             Gestione
           </div>
           <NavItem href="/cattedra/istituto" icon={Building2} label="Istituto" active={location === "/cattedra/istituto"} />
+          <NavItem href="/cattedra/licenza" icon={KeyRound} label="Licenza e utenze" active={location === "/cattedra/licenza"} />
           <NavItem href="/cattedra/moduli" icon={LayoutGrid} label="Moduli" active={location === "/cattedra/moduli"} />
           <NavItem
             href="/cattedra/richieste"

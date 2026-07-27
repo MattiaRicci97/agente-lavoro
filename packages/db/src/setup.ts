@@ -41,6 +41,7 @@ const APP_TABLES = [
   "module_questions",
   "module_lesson_progress",
   "photo_corrections",
+  "institution_members",
 ];
 
 const MODULE_CATALOG: Array<{
