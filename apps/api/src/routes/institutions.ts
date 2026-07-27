@@ -11,6 +11,7 @@ import {
   oralSessionsTable,
   modulesTable,
   institutionModulesTable,
+  institutionMembersTable,
 } from "@sillabo/db";
 import type { GradedAnswerRecord } from "@sillabo/db";
 import {
@@ -42,6 +43,13 @@ router.post("/institutions", requireTeacher, async (req, res): Promise<void> => 
   }
 
   const [institution] = await db.insert(institutionsTable).values(parsed.data).returning();
+
+  // Chi crea l'istituto ne diventa amministratore: gestisce licenza e utenti.
+  await db
+    .insert(institutionMembersTable)
+    .values({ institutionId: institution.id, teacherId: req.teacher!.id, role: "amministratore" })
+    .onConflictDoNothing();
+
   res.status(201).json(CreateInstitutionResponse.parse(institution));
 });
 
