@@ -431,3 +431,48 @@ export async function correctPhotoHomework(
   }
   return extractJson<PhotoCorrectionResult>(textBlock.text);
 }
+
+export interface NoticeDraftResult {
+  title: string;
+  body: string;
+}
+
+/**
+ * Prepara la bozza di un avviso per la bacheca di classe.
+ *
+ * Non e' l'assistente che parla alla classe: scrive solo una prima stesura
+ * a partire dagli appunti del docente, che poi la rilegge, la corregge e la
+ * pubblica a proprio nome. Per questo il tono resta neutro e non aggiunge
+ * mai contenuti che il docente non ha indicato.
+ */
+export async function draftClassNotice(
+  hint: string,
+  className: string,
+  teacherName: string,
+): Promise<NoticeDraftResult> {
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 800,
+    system:
+      "Aiuti un docente italiano a scrivere un avviso per la sua classe. " +
+      "Scrivi in italiano, in modo chiaro, cortese e sintetico, come farebbe un insegnante che si rivolge ai propri studenti. " +
+      "Usa il 'voi' rivolto alla classe. Non inventare date, luoghi, voti o dettagli che il docente non ha indicato: " +
+      "se un dato manca, lascialo fuori invece di immaginarlo. Non firmare l'avviso. " +
+      "Il titolo deve stare in poche parole. Rispondi SOLO con JSON valido.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Classe: ${className}\nDocente: ${teacherName}\n` +
+          `Appunti del docente: ${hint}\n\n` +
+          `Rispondi con JSON: {"title": "titolo breve", "body": "testo dell'avviso"}`,
+      },
+    ],
+  });
+
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("Anthropic non ha restituito testo");
+  }
+  return extractJson<NoticeDraftResult>(textBlock.text);
+}

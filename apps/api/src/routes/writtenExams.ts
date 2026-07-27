@@ -7,11 +7,13 @@ import {
   writtenExamsTable,
   writtenExamSubmissionsTable,
   teachersTable,
+  materialClassesTable,
 } from "@sillabo/db";
 import { GenerateWrittenExamParams } from "@sillabo/api-zod";
 import { generateWrittenExamPrompt, gradeWrittenExam } from "../lib/ai";
 import { requireAuth, requireTeacher, findApprovedStudentForMaterial } from "../middlewares/auth";
 import { teacherCanManageMaterial } from "../lib/materialAccess";
+import { announceToClasses } from "../lib/classFeed";
 
 const router: IRouter = Router();
 
@@ -192,6 +194,29 @@ router.post("/materials/:id/written-exams", requireTeacher, async (req, res): Pr
       status: "assegnato",
     })
     .returning();
+
+  // Il compito assegnato compare sulla bacheca delle classi collegate.
+  const linked = await db
+    .select({ classId: materialClassesTable.classId })
+    .from(materialClassesTable)
+    .where(eq(materialClassesTable.materialId, material.id));
+  await announceToClasses({
+    classIds: linked.map((l) => l.classId),
+    teacherId: req.teacher!.id,
+    authorName: req.teacher!.name,
+    kind: "compito",
+    title: `Compito assegnato: ${parsed.data.examType} su ${material.title}`,
+    body: [
+      parsed.data.instructions ?? "",
+      parsed.data.dueDate
+        ? `Consegna entro il ${new Date(`${parsed.data.dueDate}T00:00:00`).toLocaleDateString("it-IT")}.`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    materialId: material.id,
+    writtenExamId: exam.id,
+  });
 
   res.status(201).json({ ...assignmentView(exam), submissionsCount: 0, toValidateCount: 0 });
 });

@@ -14,6 +14,7 @@ import { classifyCurriculumTopic, generateSimplifiedContent, generateWrittenExam
 import { z } from "zod/v4";
 import { attachClassIds } from "../lib/materialClasses";
 import { materialVisibilityFilter, teacherCanManageMaterial } from "../lib/materialAccess";
+import { announceToClasses } from "../lib/classFeed";
 import {
   extractTextFromUploadedFile,
   UnsupportedFileTypeError,
@@ -151,6 +152,17 @@ router.post("/materials", requireTeacher, async (req, res): Promise<void> => {
     await db
       .insert(materialClassesTable)
       .values(classIds.map((classId) => ({ materialId: material.id, classId })));
+
+    // Il materiale condiviso compare sulla bacheca delle classi interessate.
+    await announceToClasses({
+      classIds,
+      teacherId: req.teacher!.id,
+      authorName: req.teacher!.name,
+      kind: "materiale",
+      title: `Nuovo materiale: ${material.title}`,
+      body: `Ho caricato il materiale di ${material.subject}. Trovate quiz e ripasso collegati.`,
+      materialId: material.id,
+    });
   }
 
   req.log.info({ materialId: material.id }, "Classifying curriculum topic");
