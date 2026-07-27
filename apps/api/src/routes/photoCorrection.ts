@@ -43,9 +43,9 @@ router.post("/photo-corrections", requireAuth, async (req, res): Promise<void> =
     return;
   }
 
-  // Nome dello studente dalla sua iscrizione (fallback: nome dal profilo).
+  // Nome e classe dello studente dalla sua iscrizione (fallback: nome dal profilo).
   const [membership] = await db
-    .select({ name: studentsTable.name })
+    .select({ name: studentsTable.name, classId: studentsTable.classId })
     .from(studentsTable)
     .where(eq(studentsTable.authUserId, req.authUserId!));
   const studentName = membership?.name ?? req.authUser!.name;
@@ -84,6 +84,7 @@ router.post("/photo-corrections", requireAuth, async (req, res): Promise<void> =
     .values({
       authUserId: req.authUserId!,
       studentName,
+      classId: membership?.classId ?? null,
       subject,
       gradeLevel,
       materialId: materialId ?? null,

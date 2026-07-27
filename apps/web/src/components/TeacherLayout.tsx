@@ -8,12 +8,14 @@ import {
   GraduationCap,
   UserCircle,
   Sparkles,
+  Stamp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/lib/auth";
-import { useListJoinRequests } from "@sillabo/api-client-react";
+import { useListJoinRequests, customFetch } from "@sillabo/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
 function NavItem({
@@ -61,6 +63,12 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
   const { data: requests } = useListJoinRequests();
   const pendingCount = requests?.filter((r) => r.status === "pending").length ?? 0;
 
+  const { data: validations } = useQuery({
+    queryKey: ["validationsPending"],
+    queryFn: () => customFetch<{ total: number }>("/api/validations/pending", { responseType: "json" }),
+  });
+  const toValidateCount = validations?.total ?? 0;
+
   return (
     <div className="flex min-h-screen flex-col bg-muted/40 md:flex-row">
       <aside className="flex w-full flex-col border-r border-border/70 bg-card/80 backdrop-blur md:w-64">
@@ -81,6 +89,13 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
           </div>
           <NavItem href="/cattedra" icon={BarChart3} label="Panoramica" active={location === "/cattedra"} />
           <NavItem href="/cattedra/classi" icon={GraduationCap} label="Le mie classi" active={location === "/cattedra/classi"} />
+          <NavItem
+            href="/cattedra/validazioni"
+            icon={Stamp}
+            label="Da validare"
+            active={location === "/cattedra/validazioni"}
+            badge={toValidateCount}
+          />
           <NavItem href="/cattedra/assistente" icon={Sparkles} label="Assistente" active={location === "/cattedra/assistente"} />
 
           <div className="px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
