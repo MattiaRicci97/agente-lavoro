@@ -19,6 +19,7 @@ import CattedraAssistente from "./pages/CattedraAssistente";
 import CattedraValidazioni from "./pages/CattedraValidazioni";
 import CattedraNuovo from "./pages/CattedraNuovo";
 import CattedraMaterial from "./pages/CattedraMaterial";
+import CattedraDomande from "./pages/CattedraDomande";
 import CattedraIstituto from "./pages/CattedraIstituto";
 import CattedraModuli from "./pages/CattedraModuli";
 import CattedraRichieste from "./pages/CattedraRichieste";
@@ -177,6 +178,11 @@ function Router() {
       <Route path="/cattedra/nuovo">
         <TeacherGate>
           <CattedraNuovo />
+        </TeacherGate>
+      </Route>
+      <Route path="/cattedra/material/:id/domande">
+        <TeacherGate>
+          <CattedraDomande />
         </TeacherGate>
       </Route>
       <Route path="/cattedra/material/:id">

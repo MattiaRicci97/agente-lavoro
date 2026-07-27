@@ -166,7 +166,7 @@ router.post("/exam-dates/:id/plan", requireAuth, async (req, res): Promise<void>
   const questionRows = await db
     .select({ topic: questionsTable.topic })
     .from(questionsTable)
-    .where(eq(questionsTable.materialId, exam.materialId));
+    .where(and(eq(questionsTable.materialId, exam.materialId), eq(questionsTable.status, "approvata")));
   const topics = Array.from(new Set(questionRows.map((q) => q.topic).filter(Boolean))).slice(0, 5);
   if (!topics.length) {
     res.status(400).json({ error: "Il materiale collegato non ha ancora domande da cui ricavare i temi" });
