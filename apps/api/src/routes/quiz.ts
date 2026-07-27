@@ -49,10 +49,11 @@ router.get("/materials/:id/quiz-set", requireAuth, async (req, res): Promise<voi
     return;
   }
 
+  // Solo le domande approvate dal docente arrivano allo studente.
   const allQuestions = await db
     .select()
     .from(questionsTable)
-    .where(eq(questionsTable.materialId, materialId));
+    .where(and(eq(questionsTable.materialId, materialId), eq(questionsTable.status, "approvata")));
 
   if (!allQuestions.length) {
     res.json({ questions: [], focusTopics: [], level: "medio" });

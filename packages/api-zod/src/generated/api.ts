@@ -522,6 +522,9 @@ export const GenerateQuestionsResponseItem = zod.object({
   "answer": zod.string(),
   "topic": zod.string(),
   "difficulty": zod.enum(['facile', 'medio', 'difficile']),
+  "status": zod.enum(['bozza', 'approvata']).optional(),
+  "authorType": zod.enum(['ai', 'docente']).optional(),
+  "editedByTeacher": zod.boolean().optional(),
   "createdAt": zod.coerce.date()
 })
 export const GenerateQuestionsResponse = zod.array(GenerateQuestionsResponseItem)
@@ -541,6 +544,9 @@ export const ListQuestionsResponseItem = zod.object({
   "answer": zod.string(),
   "topic": zod.string(),
   "difficulty": zod.enum(['facile', 'medio', 'difficile']),
+  "status": zod.enum(['bozza', 'approvata']).optional(),
+  "authorType": zod.enum(['ai', 'docente']).optional(),
+  "editedByTeacher": zod.boolean().optional(),
   "createdAt": zod.coerce.date()
 })
 export const ListQuestionsResponse = zod.array(ListQuestionsResponseItem)
