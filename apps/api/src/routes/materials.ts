@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, sql, desc, and } from "drizzle-orm";
 import { db, materialsTable, materialClassesTable, questionsTable } from "@sillabo/db";
 import {
   CreateMaterialBody,
@@ -13,6 +13,7 @@ import {
 import { classifyCurriculumTopic, generateSimplifiedContent, generateWrittenExamPrompt } from "../lib/ai";
 import { z } from "zod/v4";
 import { attachClassIds } from "../lib/materialClasses";
+import { materialVisibilityFilter, teacherCanManageMaterial } from "../lib/materialAccess";
 import {
   extractTextFromUploadedFile,
   UnsupportedFileTypeError,
@@ -79,7 +80,14 @@ router.post("/materials/:id/printable-exam", requireTeacher, async (req, res): P
   }
 });
 
-router.get("/materials", requireAuth, async (_req, res): Promise<void> => {
+router.get("/materials", requireAuth, async (req, res): Promise<void> => {
+  // Ogni utente vede solo i materiali propri o assegnati alle sue classi.
+  const visible = await materialVisibilityFilter(req);
+  if (!visible) {
+    res.json([]);
+    return;
+  }
+
   const rows = await db
     .select({
       ...materialColumns,
@@ -87,6 +95,7 @@ router.get("/materials", requireAuth, async (_req, res): Promise<void> => {
     })
     .from(materialsTable)
     .leftJoin(questionsTable, eq(questionsTable.materialId, materialsTable.id))
+    .where(visible)
     .groupBy(materialsTable.id)
     .orderBy(desc(materialsTable.createdAt));
 
@@ -131,6 +140,7 @@ router.post("/materials", requireTeacher, async (req, res): Promise<void> => {
 
   const materialInput = {
     ...rest,
+    teacherId: req.teacher!.id,
     content: finalContent,
     fileUrl: fileUrl ?? null,
     fileName: fileName ?? null,
@@ -175,15 +185,18 @@ router.get("/materials/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const [row] = await db
-    .select({
-      ...materialColumns,
-      questionCount: sql<number>`count(${questionsTable.id})::int`,
-    })
-    .from(materialsTable)
-    .leftJoin(questionsTable, eq(questionsTable.materialId, materialsTable.id))
-    .where(eq(materialsTable.id, params.data.id))
-    .groupBy(materialsTable.id);
+  const visible = await materialVisibilityFilter(req);
+  const [row] = visible
+    ? await db
+        .select({
+          ...materialColumns,
+          questionCount: sql<number>`count(${questionsTable.id})::int`,
+        })
+        .from(materialsTable)
+        .leftJoin(questionsTable, eq(questionsTable.materialId, materialsTable.id))
+        .where(and(eq(materialsTable.id, params.data.id), visible))
+        .groupBy(materialsTable.id)
+    : [];
 
   if (!row) {
     res.status(404).json({ error: "Materiale non trovato" });
@@ -235,6 +248,12 @@ router.delete("/materials/:id", requireTeacher, async (req, res): Promise<void> 
   const params = DeleteMaterialParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  // Si cancella solo il proprio materiale (o quello assegnato a una propria classe).
+  if (!(await teacherCanManageMaterial(req.teacher!.id, params.data.id))) {
+    res.status(404).json({ error: "Materiale non trovato" });
     return;
   }
 

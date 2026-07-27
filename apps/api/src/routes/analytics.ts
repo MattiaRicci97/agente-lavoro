@@ -17,6 +17,7 @@ import {
   GetDashboardSummaryResponse,
 } from "@sillabo/api-zod";
 import { attachClassIds } from "../lib/materialClasses";
+import { teacherCanManageMaterial, teacherMaterialIds } from "../lib/materialAccess";
 import { requireTeacher } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -106,6 +107,13 @@ router.get("/materials/:id/analytics", requireTeacher, async (req, res): Promise
     return;
   }
 
+  // Le statistiche contengono nomi e voti degli studenti: le vede solo
+  // il docente che ha caricato il materiale o che ha la classe collegata.
+  if (!(await teacherCanManageMaterial(req.teacher!.id, params.data.id))) {
+    res.status(404).json({ error: "Materiale non trovato" });
+    return;
+  }
+
   const [material] = await db
     .select()
     .from(materialsTable)
@@ -192,7 +200,23 @@ router.get("/materials/:id/analytics", requireTeacher, async (req, res): Promise
   );
 });
 
-router.get("/dashboard-summary", requireTeacher, async (_req, res): Promise<void> => {
+router.get("/dashboard-summary", requireTeacher, async (req, res): Promise<void> => {
+  // La panoramica riguarda il lavoro di questo docente, non l'intera piattaforma.
+  const myMaterialIds = await teacherMaterialIds(req.teacher!.id);
+  if (!myMaterialIds.length) {
+    res.json(
+      GetDashboardSummaryResponse.parse({
+        materialsCount: 0,
+        totalQuestions: 0,
+        totalQuizAttempts: 0,
+        totalOralSessions: 0,
+        averageQuizScorePercent: 0,
+        recentMaterials: [],
+      }),
+    );
+    return;
+  }
+
   const materialRows = await db
     .select({
       id: materialsTable.id,
@@ -210,6 +234,7 @@ router.get("/dashboard-summary", requireTeacher, async (_req, res): Promise<void
     })
     .from(materialsTable)
     .leftJoin(questionsTable, eq(questionsTable.materialId, materialsTable.id))
+    .where(inArray(materialsTable.id, myMaterialIds))
     .groupBy(materialsTable.id)
     .orderBy(desc(materialsTable.createdAt));
 
@@ -217,12 +242,17 @@ router.get("/dashboard-summary", requireTeacher, async (_req, res): Promise<void
 
   const [{ totalQuestions } = { totalQuestions: 0 }] = await db
     .select({ totalQuestions: sql<number>`count(*)::int` })
-    .from(questionsTable);
+    .from(questionsTable)
+    .where(inArray(questionsTable.materialId, myMaterialIds));
 
-  const quizAttempts = await db.select().from(quizAttemptsTable);
+  const quizAttempts = await db
+    .select()
+    .from(quizAttemptsTable)
+    .where(inArray(quizAttemptsTable.materialId, myMaterialIds));
   const [{ totalOralSessions } = { totalOralSessions: 0 }] = await db
     .select({ totalOralSessions: sql<number>`count(*)::int` })
-    .from(oralSessionsTable);
+    .from(oralSessionsTable)
+    .where(inArray(oralSessionsTable.materialId, myMaterialIds));
 
   const averageQuizScorePercent = quizAttempts.length
     ? Math.round(

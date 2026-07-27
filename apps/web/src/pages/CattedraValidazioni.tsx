@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, ScanLine, Mic, Sparkles, Stamp, PartyPopper } from "lucide-react";
+import { CheckCircle2, ScanLine, Mic, Sparkles, Stamp, PartyPopper, PenLine } from "lucide-react";
 
 interface PendingPhoto {
   id: number;
@@ -39,9 +39,23 @@ interface PendingOral {
   createdAt: string;
 }
 
+interface PendingWritten {
+  id: number;
+  studentName: string;
+  answer: string;
+  grade: number | null;
+  feedback: string;
+  examType: string;
+  prompt: string;
+  materialTitle: string;
+  subject: string;
+  createdAt: string;
+}
+
 interface PendingResponse {
   photoCorrections: PendingPhoto[];
   oralSessions: PendingOral[];
+  writtenSubmissions: PendingWritten[];
   total: number;
 }
 
@@ -124,15 +138,23 @@ export default function CattedraValidazioni() {
       grade,
       feedback,
     }: {
-      kind: "photo" | "oral";
+      kind: "photo" | "oral" | "written";
       id: number;
       grade: number | null;
       feedback: string;
-    }) =>
-      customFetch(
-        kind === "photo" ? `/api/photo-corrections/${id}/validate` : `/api/oral-sessions/${id}/validate`,
-        { method: "POST", responseType: "json", body: JSON.stringify({ grade, feedback }) },
-      ),
+    }) => {
+      const path =
+        kind === "photo"
+          ? `/api/photo-corrections/${id}/validate`
+          : kind === "oral"
+            ? `/api/oral-sessions/${id}/validate`
+            : `/api/written-submissions/${id}/validate`;
+      return customFetch(path, {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify({ grade, feedback }),
+      });
+    },
     onSuccess: () => {
       toast({ title: "Valutazione firmata", description: "Lo studente vede ora la tua valutazione." });
       queryClient.invalidateQueries({ queryKey: ["validationsPending"] });
@@ -147,6 +169,7 @@ export default function CattedraValidazioni() {
 
   const photos = data?.photoCorrections ?? [];
   const orals = data?.oralSessions ?? [];
+  const writtens = data?.writtenSubmissions ?? [];
 
   return (
     <TeacherLayout>
@@ -163,7 +186,7 @@ export default function CattedraValidazioni() {
             <Skeleton className="h-48 w-full" />
             <Skeleton className="h-48 w-full" />
           </div>
-        ) : photos.length === 0 && orals.length === 0 ? (
+        ) : photos.length === 0 && orals.length === 0 && writtens.length === 0 ? (
           <div className="text-center p-12 border rounded-lg bg-card border-dashed">
             <PartyPopper className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
             <h3 className="text-lg font-medium">Non c'è nulla in attesa</h3>
@@ -216,6 +239,50 @@ export default function CattedraValidazioni() {
                     proposedFeedback={p.feedback}
                     isPending={sign.isPending}
                     onSign={(grade, feedback) => sign.mutate({ kind: "photo", id: p.id, grade, feedback })}
+                  />
+                </CardContent>
+              </Card>
+            ))}
+
+            {writtens.map((w) => (
+              <Card key={`w-${w.id}`} className="overflow-hidden">
+                <div className="flex items-center gap-2 border-b bg-muted/30 px-5 py-3">
+                  <PenLine className="h-4 w-4 text-secondary" />
+                  <span className="font-medium">{w.studentName}</span>
+                  <span className="text-sm text-muted-foreground">
+                    · {w.materialTitle} · {w.subject}
+                  </span>
+                  <Badge variant="outline" className="ml-auto uppercase text-[10px]">{w.examType}</Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(w.createdAt).toLocaleDateString("it-IT")}
+                  </span>
+                </div>
+                <CardContent className="p-5 space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">Traccia:</span> {w.prompt}
+                  </p>
+
+                  <div className="rounded-lg border bg-card p-4">
+                    <div className="mb-2 text-sm font-medium">L'elaborato di {w.studentName}</div>
+                    <p className="max-h-72 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed">
+                      {w.answer}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                      <Sparkles className="h-4 w-4" />
+                      Proposta dell'assistente
+                      {w.grade !== null && <Badge variant="outline" className="ml-auto">{w.grade}/10</Badge>}
+                    </div>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{w.feedback}</p>
+                  </div>
+
+                  <SignBox
+                    proposedGrade={w.grade}
+                    proposedFeedback={w.feedback}
+                    isPending={sign.isPending}
+                    onSign={(grade, feedback) => sign.mutate({ kind: "written", id: w.id, grade, feedback })}
                   />
                 </CardContent>
               </Card>
