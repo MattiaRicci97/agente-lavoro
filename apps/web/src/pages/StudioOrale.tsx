@@ -172,6 +172,7 @@ export default function StudioOrale() {
   }
 
   const isCompleted = session.status === "completata";
+  const isValidated = session.validationStatus === "validata";
 
   return (
     <StudentLayout>
@@ -200,8 +201,12 @@ export default function StudioOrale() {
               </Button>
             )}
             {isCompleted && (
-              <div className="bg-secondary/10 text-secondary px-4 py-1 rounded-full text-sm font-medium">
-                Voto: {session.grade}/10
+              <div
+                className={`px-4 py-1 rounded-full text-sm font-medium ${
+                  isValidated ? "bg-green-100 text-green-800" : "bg-amber-50 text-amber-800 border border-amber-200"
+                }`}
+              >
+                {isValidated ? `Voto del prof: ${session.teacherGrade ?? "—"}/10` : `Proposta: ${session.grade}/10`}
               </div>
             )}
           </div>
@@ -289,7 +294,22 @@ export default function StudioOrale() {
         ) : (
           <Card className="mt-6 border-secondary/30 bg-secondary/5">
             <CardContent className="p-6">
-              <h3 className="font-bold text-lg mb-2 text-secondary">Feedback Finale</h3>
+              {isValidated ? (
+                <div className="mb-4 rounded-lg border border-primary/25 bg-primary/5 p-4">
+                  <h3 className="font-semibold text-primary mb-1">Il tuo prof ha valutato l'interrogazione</h3>
+                  {session.teacherFeedback && (
+                    <p className="leading-relaxed whitespace-pre-wrap">{session.teacherFeedback}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  Questa è una <strong>proposta dell'assistente</strong>: il voto diventa ufficiale solo quando il tuo
+                  docente lo conferma.
+                </div>
+              )}
+              <h3 className="font-bold text-lg mb-2 text-secondary">
+                {isValidated ? "Analisi dell'assistente" : "Feedback Finale"}
+              </h3>
               <p className="text-foreground leading-relaxed whitespace-pre-wrap">{session.feedback}</p>
               <div className="mt-6 text-center">
                 <Button asChild variant="outline">

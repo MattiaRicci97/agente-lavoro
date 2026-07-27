@@ -22,6 +22,8 @@ import {
   ScanLine,
   Sparkles,
   RefreshCw,
+  BadgeCheck,
+  Hourglass,
 } from "lucide-react";
 
 interface PhotoCorrection {
@@ -33,6 +35,9 @@ interface PhotoCorrection {
   strengths: string[];
   improvements: string[];
   createdAt: string;
+  validationStatus?: "da_validare" | "validata";
+  teacherGrade?: number | null;
+  teacherFeedback?: string | null;
 }
 
 function gradeColor(grade: number | null): string {
@@ -142,6 +147,8 @@ export default function StudioFoto() {
 
   // --- Schermata risultato ---
   if (result) {
+    const isValidated = result.validationStatus === "validata";
+    const shownGrade = isValidated ? (result.teacherGrade ?? null) : result.grade;
     return (
       <StudentLayout>
         <div className="max-w-2xl mx-auto space-y-6">
@@ -154,20 +161,46 @@ export default function StudioFoto() {
             <div className="bg-secondary/5 border-b border-secondary/10 p-6 flex items-center justify-between">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wider text-secondary">{result.subject}</div>
-                <h1 className="font-display text-2xl font-semibold">Compito corretto</h1>
+                <h1 className="font-display text-2xl font-semibold">
+                  {isValidated ? "Compito corretto dal prof" : "Compito esaminato"}
+                </h1>
               </div>
-              <div className={`rounded-2xl border px-5 py-3 text-center ${gradeColor(result.grade)}`}>
-                <div className="text-3xl font-bold leading-none">{result.grade ?? "—"}</div>
+              <div className={`rounded-2xl border px-5 py-3 text-center ${gradeColor(shownGrade)}`}>
+                <div className="text-3xl font-bold leading-none">{shownGrade ?? "—"}</div>
                 <div className="text-[11px] font-medium uppercase tracking-wide">/10</div>
               </div>
             </div>
             <CardContent className="p-6 space-y-6">
+              {isValidated ? (
+                <div className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-900">
+                  <BadgeCheck className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>Valutazione confermata dal tuo docente.</span>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <Hourglass className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>
+                    Questa è una <strong>proposta dell'assistente</strong>, utile per capire subito come sei andato.
+                    Il voto diventa ufficiale solo quando il tuo docente lo conferma.
+                  </span>
+                </div>
+              )}
+
               {preview && (
                 <img src={preview} alt="Il tuo compito" className="max-h-64 w-auto rounded-lg border mx-auto" />
               )}
 
+              {isValidated && result.teacherFeedback && (
+                <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
+                  <h3 className="text-sm font-semibold text-primary mb-1">Il commento del tuo prof</h3>
+                  <p className="leading-relaxed whitespace-pre-wrap">{result.teacherFeedback}</p>
+                </div>
+              )}
+
               <div>
-                <h3 className="text-sm font-semibold text-muted-foreground mb-1">Valutazione del prof</h3>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-1">
+                  {isValidated ? "Analisi dell'assistente" : "Cosa dice l'assistente"}
+                </h3>
                 <p className="leading-relaxed whitespace-pre-wrap">{result.feedback}</p>
               </div>
 
@@ -359,9 +392,17 @@ export default function StudioFoto() {
                       {new Date(h.createdAt).toLocaleDateString("it-IT", { day: "numeric", month: "long" })}
                     </div>
                   </div>
-                  <Badge variant="outline" className={gradeColor(h.grade)}>
-                    {h.grade ?? "—"}/10
-                  </Badge>
+                  {h.validationStatus === "validata" ? (
+                    <Badge variant="outline" className={gradeColor(h.teacherGrade ?? null)}>
+                      <BadgeCheck className="mr-1 h-3 w-3" />
+                      {h.teacherGrade ?? "—"}/10
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
+                      <Hourglass className="mr-1 h-3 w-3" />
+                      dal prof
+                    </Badge>
+                  )}
                 </div>
               ))}
             </div>

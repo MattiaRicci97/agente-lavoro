@@ -629,6 +629,10 @@ export const StartOralSessionResponse = zod.object({
   "status": zod.enum(['in_corso', 'completata']),
   "grade": zod.number().nullable(),
   "feedback": zod.string().nullable(),
+  "validationStatus": zod.enum(['da_validare', 'validata']).optional(),
+  "teacherGrade": zod.number().nullable().optional(),
+  "teacherFeedback": zod.string().nullable().optional(),
+  "validatedAt": zod.coerce.date().nullable().optional(),
   "createdAt": zod.coerce.date()
 }).and(zod.object({
   "messages": zod.array(zod.object({
@@ -655,6 +659,10 @@ export const ListOralSessionsResponseItem = zod.object({
   "status": zod.enum(['in_corso', 'completata']),
   "grade": zod.number().nullable(),
   "feedback": zod.string().nullable(),
+  "validationStatus": zod.enum(['da_validare', 'validata']).optional(),
+  "teacherGrade": zod.number().nullable().optional(),
+  "teacherFeedback": zod.string().nullable().optional(),
+  "validatedAt": zod.coerce.date().nullable().optional(),
   "createdAt": zod.coerce.date()
 })
 export const ListOralSessionsResponse = zod.array(ListOralSessionsResponseItem)
@@ -674,6 +682,10 @@ export const GetOralSessionResponse = zod.object({
   "status": zod.enum(['in_corso', 'completata']),
   "grade": zod.number().nullable(),
   "feedback": zod.string().nullable(),
+  "validationStatus": zod.enum(['da_validare', 'validata']).optional(),
+  "teacherGrade": zod.number().nullable().optional(),
+  "teacherFeedback": zod.string().nullable().optional(),
+  "validatedAt": zod.coerce.date().nullable().optional(),
   "createdAt": zod.coerce.date()
 }).and(zod.object({
   "messages": zod.array(zod.object({
@@ -707,6 +719,10 @@ export const ReplyToOralSessionResponse = zod.object({
   "status": zod.enum(['in_corso', 'completata']),
   "grade": zod.number().nullable(),
   "feedback": zod.string().nullable(),
+  "validationStatus": zod.enum(['da_validare', 'validata']).optional(),
+  "teacherGrade": zod.number().nullable().optional(),
+  "teacherFeedback": zod.string().nullable().optional(),
+  "validatedAt": zod.coerce.date().nullable().optional(),
   "createdAt": zod.coerce.date()
 }).and(zod.object({
   "messages": zod.array(zod.object({

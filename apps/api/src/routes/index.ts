@@ -17,6 +17,7 @@ import moduleLearningRouter from "./moduleLearning";
 import assistantRouter from "./assistant";
 import tutorRouter from "./tutor";
 import photoCorrectionRouter from "./photoCorrection";
+import validationsRouter from "./validations";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(moduleLearningRouter);
 router.use(assistantRouter);
 router.use(tutorRouter);
 router.use(photoCorrectionRouter);
+router.use(validationsRouter);
 
 export default router;
