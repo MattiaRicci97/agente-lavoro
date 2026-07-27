@@ -4,11 +4,12 @@ import {
   db,
   materialsTable,
   materialClassesTable,
-  classesTable,
+  classTeachersTable,
   studentsTable,
   teachersTable,
 } from "@sillabo/db";
 import type { Request } from "express";
+import { teacherClassIds } from "./classAccess";
 
 /**
  * Chi vede quali materiali.
@@ -29,15 +30,6 @@ async function studentClassIds(authUserId: string): Promise<number[]> {
     .from(studentsTable)
     .where(eq(studentsTable.authUserId, authUserId));
   return rows.map((r) => r.classId);
-}
-
-/** Classi di cui il docente e' titolare. */
-async function teacherClassIds(teacherId: number): Promise<number[]> {
-  const rows = await db
-    .select({ id: classesTable.id })
-    .from(classesTable)
-    .where(eq(classesTable.teacherId, teacherId));
-  return rows.map((r) => r.id);
 }
 
 /** Materiali assegnati ad almeno una delle classi indicate. */
@@ -94,8 +86,8 @@ export async function teacherCanManageMaterial(teacherId: number, materialId: nu
   const [linked] = await db
     .select({ classId: materialClassesTable.classId })
     .from(materialClassesTable)
-    .innerJoin(classesTable, eq(classesTable.id, materialClassesTable.classId))
-    .where(and(eq(materialClassesTable.materialId, materialId), eq(classesTable.teacherId, teacherId)));
+    .innerJoin(classTeachersTable, eq(classTeachersTable.classId, materialClassesTable.classId))
+    .where(and(eq(materialClassesTable.materialId, materialId), eq(classTeachersTable.teacherId, teacherId)));
 
   return !!linked;
 }

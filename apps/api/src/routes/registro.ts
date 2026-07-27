@@ -12,6 +12,8 @@ import {
   writtenExamsTable,
   writtenExamSubmissionsTable,
   quizAttemptsTable,
+  classTeachersTable,
+  teachersTable,
 } from "@sillabo/db";
 import { requireTeacher } from "../middlewares/auth";
 
@@ -39,9 +41,14 @@ const NoteSchema = z.object({
 /** La classe dev'essere del docente che chiede. */
 async function ownedClass(teacherId: number, classId: number) {
   const [cls] = await db
-    .select()
+    .select({
+      id: classesTable.id,
+      name: classesTable.name,
+      gradeLevel: classesTable.gradeLevel,
+    })
     .from(classesTable)
-    .where(and(eq(classesTable.id, classId), eq(classesTable.teacherId, teacherId)));
+    .innerJoin(classTeachersTable, eq(classTeachersTable.classId, classesTable.id))
+    .where(and(eq(classesTable.id, classId), eq(classTeachersTable.teacherId, teacherId)));
   return cls ?? null;
 }
 
@@ -59,7 +66,8 @@ async function ownedStudent(teacherId: number, studentId: number) {
     })
     .from(studentsTable)
     .innerJoin(classesTable, eq(classesTable.id, studentsTable.classId))
-    .where(and(eq(studentsTable.id, studentId), eq(classesTable.teacherId, teacherId)));
+    .innerJoin(classTeachersTable, eq(classTeachersTable.classId, classesTable.id))
+    .where(and(eq(studentsTable.id, studentId), eq(classTeachersTable.teacherId, teacherId)));
   return row ?? null;
 }
 
@@ -71,6 +79,8 @@ export interface RegistroEntry {
   title: string;
   grade: number | null;
   feedback: string | null;
+  /** Chi ha firmato: nel consiglio di classe i voti sono di piu' colleghi. */
+  signedBy: string | null;
 }
 
 /**
@@ -98,8 +108,10 @@ async function signedEntries(student: {
       title: photoCorrectionsTable.assignmentPrompt,
       grade: photoCorrectionsTable.teacherGrade,
       feedback: photoCorrectionsTable.teacherFeedback,
+      signedBy: teachersTable.name,
     })
     .from(photoCorrectionsTable)
+    .leftJoin(teachersTable, eq(teachersTable.id, photoCorrectionsTable.validatedByTeacherId))
     .where(
       and(
         eq(photoCorrectionsTable.validationStatus, "validata"),
@@ -120,9 +132,11 @@ async function signedEntries(student: {
       title: materialsTable.title,
       grade: oralSessionsTable.teacherGrade,
       feedback: oralSessionsTable.teacherFeedback,
+      signedBy: teachersTable.name,
     })
     .from(oralSessionsTable)
     .innerJoin(materialsTable, eq(materialsTable.id, oralSessionsTable.materialId))
+    .leftJoin(teachersTable, eq(teachersTable.id, oralSessionsTable.validatedByTeacherId))
     .where(
       and(
         eq(oralSessionsTable.validationStatus, "validata"),
@@ -140,8 +154,10 @@ async function signedEntries(student: {
       examType: writtenExamsTable.examType,
       grade: writtenExamSubmissionsTable.teacherGrade,
       feedback: writtenExamSubmissionsTable.teacherFeedback,
+      signedBy: teachersTable.name,
     })
     .from(writtenExamSubmissionsTable)
+    .leftJoin(teachersTable, eq(teachersTable.id, writtenExamSubmissionsTable.validatedByTeacherId))
     .innerJoin(writtenExamsTable, eq(writtenExamsTable.id, writtenExamSubmissionsTable.examId))
     .innerJoin(materialsTable, eq(materialsTable.id, writtenExamsTable.materialId))
     .where(
@@ -166,6 +182,7 @@ async function signedEntries(student: {
       title: p.title?.slice(0, 120) || "Compito fotografato",
       grade: p.grade,
       feedback: p.feedback,
+      signedBy: p.signedBy,
     })),
     ...orals.map((o) => ({
       kind: "interrogazione" as const,
@@ -175,6 +192,7 @@ async function signedEntries(student: {
       title: o.title,
       grade: o.grade,
       feedback: o.feedback,
+      signedBy: o.signedBy,
     })),
     ...writtens.map((w) => ({
       kind: "elaborato" as const,
@@ -184,6 +202,7 @@ async function signedEntries(student: {
       title: `${w.examType} — ${w.title}`,
       grade: w.grade,
       feedback: w.feedback,
+      signedBy: w.signedBy,
     })),
   ];
 
@@ -386,7 +405,7 @@ router.get("/classes/:id/registro/export", requireTeacher, async (req, res): Pro
     .where(eq(studentsTable.classId, classId))
     .orderBy(studentsTable.name);
 
-  const lines = ["Studente;Data;Tipo;Materia;Prova;Voto"];
+  const lines = ["Studente;Data;Tipo;Materia;Prova;Voto;Firmato da"];
   for (const s of roster) {
     for (const e of (await signedEntries(s)).filter((x) => x.grade !== null)) {
       lines.push(
@@ -397,6 +416,7 @@ router.get("/classes/:id/registro/export", requireTeacher, async (req, res): Pro
           csvCell(e.subject),
           csvCell(e.title),
           csvCell(e.grade),
+          csvCell(e.signedBy),
         ].join(";"),
       );
     }

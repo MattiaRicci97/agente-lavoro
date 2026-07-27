@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, GraduationCap, Loader2, Users, Copy, Check, Plus, CalendarDays, Trash2 } from "lucide-react";
+import { ConsiglioDiClasse, ClassiDaRaggiungere } from "@/components/ConsiglioDiClasse";
 
 interface ExamDateRow {
   id: number;
@@ -426,7 +427,7 @@ function ClassesSection({ institutionId }: { institutionId: number }) {
             <p className="text-muted-foreground">Crea la tua prima classe qui sopra.</p>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-4">
             {classes.map((c) => (
               <Card key={c.id}>
                 <CardContent className="p-5 space-y-3">
@@ -444,11 +445,14 @@ function ClassesSection({ institutionId }: { institutionId: number }) {
                     <span className="text-xs text-muted-foreground">Codice per gli studenti:</span>
                     <JoinCode code={c.joinCode} />
                   </div>
+                  <ConsiglioDiClasse classId={c.id} />
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
+
+        <ClassiDaRaggiungere />
       </div>
     </div>
   );

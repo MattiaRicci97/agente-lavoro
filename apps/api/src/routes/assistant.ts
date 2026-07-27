@@ -13,6 +13,7 @@ import {
 } from "@sillabo/db";
 import type { GradedAnswerRecord } from "@sillabo/db";
 import { requireTeacher } from "../middlewares/auth";
+import { teacherClassIds } from "../lib/classAccess";
 import { askTeacherAssistant } from "../lib/ai";
 
 const router: IRouter = Router();
@@ -27,7 +28,10 @@ const AskSchema = z.object({
 
 /** Raccoglie un quadro sintetico dei dati delle classi del docente per l'AI. */
 async function buildClassSnapshot(teacherId: number): Promise<string> {
-  const classes = await db.select().from(classesTable).where(eq(classesTable.teacherId, teacherId));
+  const ids = await teacherClassIds(teacherId);
+  const classes = ids.length
+    ? await db.select().from(classesTable).where(inArray(classesTable.id, ids))
+    : [];
   if (!classes.length) return "Il docente non ha ancora classi.";
 
   const classIds = classes.map((c) => c.id);
