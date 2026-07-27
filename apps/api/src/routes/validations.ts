@@ -8,6 +8,8 @@ import {
   materialClassesTable,
   photoCorrectionsTable,
   oralSessionsTable,
+  writtenExamsTable,
+  writtenExamSubmissionsTable,
 } from "@sillabo/db";
 import { requireTeacher } from "../middlewares/auth";
 
@@ -98,11 +100,96 @@ router.get("/validations/pending", requireTeacher, async (req, res): Promise<voi
         .limit(50)
     : [];
 
+  // Compiti scritti consegnati dagli studenti delle classi del docente.
+  const writtenSubmissions = materialIds.length
+    ? await db
+        .select({
+          id: writtenExamSubmissionsTable.id,
+          studentName: writtenExamSubmissionsTable.studentName,
+          answer: writtenExamSubmissionsTable.answer,
+          grade: writtenExamSubmissionsTable.aiGrade,
+          feedback: writtenExamSubmissionsTable.aiFeedback,
+          createdAt: writtenExamSubmissionsTable.createdAt,
+          examType: writtenExamsTable.examType,
+          prompt: writtenExamsTable.prompt,
+          materialTitle: materialsTable.title,
+          subject: materialsTable.subject,
+        })
+        .from(writtenExamSubmissionsTable)
+        .innerJoin(writtenExamsTable, eq(writtenExamsTable.id, writtenExamSubmissionsTable.examId))
+        .innerJoin(materialsTable, eq(materialsTable.id, writtenExamsTable.materialId))
+        .where(
+          and(
+            inArray(writtenExamsTable.materialId, materialIds),
+            eq(writtenExamSubmissionsTable.validationStatus, "da_validare"),
+          ),
+        )
+        .orderBy(desc(writtenExamSubmissionsTable.createdAt))
+        .limit(50)
+    : [];
+
   res.json({
     photoCorrections: photos,
     oralSessions: orals,
-    total: photos.length + orals.length,
+    writtenSubmissions,
+    total: photos.length + orals.length + writtenSubmissions.length,
   });
+});
+
+/** Il docente firma (confermando o correggendo) un compito scritto consegnato. */
+router.post("/written-submissions/:id/validate", requireTeacher, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "id non valido" });
+    return;
+  }
+  const parsed = ValidateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [row] = await db
+    .select({ id: writtenExamSubmissionsTable.id, materialId: writtenExamsTable.materialId })
+    .from(writtenExamSubmissionsTable)
+    .innerJoin(writtenExamsTable, eq(writtenExamsTable.id, writtenExamSubmissionsTable.examId))
+    .where(eq(writtenExamSubmissionsTable.id, id));
+  if (!row) {
+    res.status(404).json({ error: "Consegna non trovata" });
+    return;
+  }
+
+  // Il materiale dev'essere assegnato a una classe del docente.
+  const classIds = await teacherClassIds(req.teacher!.id);
+  const [link] = classIds.length
+    ? await db
+        .select({ classId: materialClassesTable.classId })
+        .from(materialClassesTable)
+        .where(
+          and(
+            eq(materialClassesTable.materialId, row.materialId),
+            inArray(materialClassesTable.classId, classIds),
+          ),
+        )
+    : [];
+  if (!link) {
+    res.status(404).json({ error: "Consegna non trovata" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(writtenExamSubmissionsTable)
+    .set({
+      validationStatus: "validata",
+      teacherGrade: parsed.data.grade,
+      teacherFeedback: parsed.data.feedback,
+      validatedByTeacherId: req.teacher!.id,
+      validatedAt: new Date(),
+    })
+    .where(eq(writtenExamSubmissionsTable.id, id))
+    .returning();
+
+  res.json(updated);
 });
 
 /** Il docente firma (confermando o correggendo) la proposta su un compito fotografato. */

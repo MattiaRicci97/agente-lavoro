@@ -9,20 +9,19 @@ import {
   useListQuestions,
   getListQuestionsQueryKey,
   getListMaterialsQueryKey,
-  useListWrittenExams,
-  getListWrittenExamsQueryKey,
-  useGenerateWrittenExam,
   useSimplifyMaterial,
   customFetch,
 } from "@sillabo/api-client-react";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
-import { ArrowLeft, BrainCircuit, AlertTriangle, CheckCircle2, XCircle, Loader2, FileText, HeartHandshake, Printer, X, Pencil } from "lucide-react";
+import { ArrowLeft, BrainCircuit, AlertTriangle, CheckCircle2, XCircle, Loader2, FileText, HeartHandshake, Printer, X, Pencil, Trash2, Stamp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
 
@@ -31,6 +30,17 @@ const examTypeLabels: Record<string, string> = {
   versione: "Versione",
   problema: "Problema",
 };
+
+/** Compito assegnato, come lo vede il docente. */
+interface TeacherAssignment {
+  id: number;
+  examType: string;
+  prompt: string;
+  dueDate: string | null;
+  instructions: string | null;
+  submissionsCount: number;
+  toValidateCount: number;
+}
 
 interface PrintableExam {
   prompt: string;
@@ -98,11 +108,35 @@ export default function CattedraMaterial() {
 
   const generateQuestions = useGenerateQuestions();
 
-  const { data: writtenExams, isLoading: writtenExamsLoading } = useListWrittenExams(materialId, {
-    query: { enabled: !!materialId, queryKey: getListWrittenExamsQueryKey(materialId) }
+  const [dueDate, setDueDate] = useState("");
+  const assignmentsKey = ["writtenAssignments", materialId];
+  const { data: assignments, isLoading: assignmentsLoading } = useQuery({
+    queryKey: assignmentsKey,
+    enabled: !!materialId,
+    queryFn: () =>
+      customFetch<TeacherAssignment[]>(`/api/materials/${materialId}/written-exams`, {
+        responseType: "json",
+      }),
   });
 
-  const generateWrittenExam = useGenerateWrittenExam();
+  const assignHomework = useMutation({
+    mutationFn: (data: { examType: string; dueDate: string | null }) =>
+      customFetch(`/api/materials/${materialId}/written-exams`, {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify(data),
+      }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: assignmentsKey }),
+  });
+
+  const withdrawHomework = useMutation({
+    mutationFn: (examId: number) =>
+      customFetch(`/api/written-exams/${examId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast({ title: "Compito ritirato" });
+      queryClient.invalidateQueries({ queryKey: assignmentsKey });
+    },
+  });
   const simplifyMaterial = useSimplifyMaterial();
 
   const draftCount = (questions ?? []).filter((q: any) => q.status === "bozza").length;
@@ -141,16 +175,25 @@ export default function CattedraMaterial() {
     });
   };
 
-  const handleGenerateWrittenExam = (examType: "tema" | "versione" | "problema") => {
-    generateWrittenExam.mutate({ id: materialId, data: { examType } }, {
-      onSuccess: () => {
-        toast({ title: "Verifica generata", description: `${examTypeLabels[examType]} pronto per gli studenti.` });
-        queryClient.invalidateQueries({ queryKey: getListWrittenExamsQueryKey(materialId) });
+  const handleAssign = (examType: "tema" | "versione" | "problema") => {
+    assignHomework.mutate(
+      { examType, dueDate: dueDate || null },
+      {
+        onSuccess: () => {
+          toast({
+            title: "Compito assegnato",
+            description: `${examTypeLabels[examType]} visibile agli studenti delle classi collegate.`,
+          });
+          setDueDate("");
+        },
+        onError: (err: any) =>
+          toast({
+            title: "Errore",
+            description: err?.data?.error ?? "Impossibile assegnare il compito.",
+            variant: "destructive",
+          }),
       },
-      onError: () => {
-        toast({ title: "Errore", description: "Impossibile generare la verifica.", variant: "destructive" });
-      }
-    });
+    );
   };
 
   const handleSimplify = () => {
@@ -342,21 +385,27 @@ export default function CattedraMaterial() {
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  Verifiche scritte
+                  Compiti a casa
                 </CardTitle>
-                <CardDescription>Genera verifiche in formato reale (tema, versione, problema)</CardDescription>
+                <CardDescription>
+                  Assegna un compito alle classi collegate. Lo correggi tu: l'assistente prepara solo una proposta.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Consegna entro (facoltativo)</Label>
+                  <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                </div>
                 <div className="grid grid-cols-3 gap-2">
                   {(["tema", "versione", "problema"] as const).map((type) => (
                     <Button
                       key={type}
                       size="sm"
                       variant="outline"
-                      onClick={() => handleGenerateWrittenExam(type)}
-                      disabled={generateWrittenExam.isPending}
+                      onClick={() => handleAssign(type)}
+                      disabled={assignHomework.isPending}
                     >
-                      {generateWrittenExam.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : examTypeLabels[type]}
+                      {assignHomework.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : examTypeLabels[type]}
                     </Button>
                   ))}
                 </div>
@@ -379,21 +428,45 @@ export default function CattedraMaterial() {
                     ))}
                   </div>
                 </div>
-                {writtenExamsLoading ? <Skeleton className="h-16" /> : !writtenExams?.length ? (
-                  <div className="text-sm text-muted-foreground">Nessuna verifica generata.</div>
+                {assignmentsLoading ? (
+                  <Skeleton className="h-16" />
+                ) : !assignments?.length ? (
+                  <div className="text-sm text-muted-foreground">Nessun compito assegnato.</div>
                 ) : (
-                  <div className="space-y-3 max-h-[280px] overflow-y-auto pr-2">
-                    {writtenExams.map((exam) => (
-                      <div key={exam.id} className="text-sm border-b pb-3 last:border-0 last:pb-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <Badge variant="outline" className="uppercase text-[10px]">{examTypeLabels[exam.examType]}</Badge>
-                          {exam.status === "corretta" ? (
-                            <span className="text-xs font-semibold text-secondary">{exam.studentName}: {exam.grade}/10</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Da svolgere</span>
+                  <div className="max-h-[280px] space-y-3 overflow-y-auto pr-2">
+                    {assignments.map((a) => (
+                      <div key={a.id} className="border-b pb-3 text-sm last:border-0 last:pb-0">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" className="uppercase text-[10px]">
+                            {examTypeLabels[a.examType] ?? a.examType}
+                          </Badge>
+                          {a.dueDate && (
+                            <span className="text-xs text-muted-foreground">
+                              entro il {new Date(`${a.dueDate}T00:00:00`).toLocaleDateString("it-IT")}
+                            </span>
                           )}
+                          <span className="ml-auto text-xs text-muted-foreground">
+                            {a.submissionsCount} consegn{a.submissionsCount === 1 ? "a" : "e"}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            onClick={() => withdrawHomework.mutate(a.id)}
+                            aria-label="Ritira il compito"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
-                        <div className="text-muted-foreground text-xs line-clamp-2">{exam.prompt}</div>
+                        <div className="line-clamp-2 text-xs text-muted-foreground">{a.prompt}</div>
+                        {a.toValidateCount > 0 && (
+                          <Link href="/cattedra/validazioni">
+                            <span className="mt-1.5 inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary">
+                              <Stamp className="h-3 w-3" />
+                              {a.toValidateCount} da correggere
+                            </span>
+                          </Link>
+                        )}
                       </div>
                     ))}
                   </div>

@@ -10,6 +10,7 @@ export * from "./quizAttempts";
 export * from "./oralSessions";
 export * from "./oralMessages";
 export * from "./writtenExams";
+export * from "./writtenExamSubmissions";
 export * from "./reviewItems";
 export * from "./modules";
 export * from "./examDates";

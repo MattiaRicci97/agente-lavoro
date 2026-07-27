@@ -2,9 +2,15 @@ import { pgTable, serial, text, timestamp, integer, primaryKey } from "drizzle-o
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { classesTable } from "./classes";
+import { teachersTable } from "./teachers";
 
 export const materialsTable = pgTable("materials", {
   id: serial("id").primaryKey(),
+  /**
+   * Docente che ha caricato il materiale. Nullable per i materiali creati
+   * prima dell'introduzione dell'autore (vengono riassegnati dal setup).
+   */
+  teacherId: integer("teacher_id").references(() => teachersTable.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   subject: text("subject").notNull(),
   gradeLevel: text("grade_level").notNull(),
@@ -33,6 +39,7 @@ export const materialClassesTable = pgTable(
 export const insertMaterialSchema = createInsertSchema(materialsTable).omit({
   id: true,
   createdAt: true,
+  teacherId: true,
   curriculumTopic: true,
   curriculumSubtopic: true,
   simplifiedContent: true,

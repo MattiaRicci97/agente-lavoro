@@ -33,9 +33,9 @@ export default function StudioDashboard() {
               <ScanLine className="h-6 w-6" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-display text-lg font-semibold text-secondary">Correggi un compito da una foto</h3>
+              <h3 className="font-display text-lg font-semibold text-secondary">Consegna un compito da una foto</h3>
               <p className="text-sm text-muted-foreground">
-                Fotografa il compito scritto a mano: l'AI lo legge, lo corregge e ti dà voto e consigli.
+                Fotografa il compito scritto a mano: l'assistente lo legge e prepara una correzione, il voto lo dà il tuo docente.
               </p>
             </div>
             <ArrowRight className="h-5 w-5 shrink-0 text-secondary transition-transform group-hover:translate-x-0.5" />
@@ -84,7 +84,7 @@ export default function StudioDashboard() {
                     <Button asChild variant="outline" className="w-full">
                       <Link href={`/studio/material/${material.id}/scritto`}>
                         <FileText className="w-4 h-4 mr-2" />
-                        Scritto
+                        Compiti
                       </Link>
                     </Button>
                     <Button asChild className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground">

@@ -33,6 +33,7 @@ const APP_TABLES = [
   "oral_sessions",
   "oral_messages",
   "written_exams",
+  "written_exam_submissions",
   "review_items",
   "institution_modules",
   "modules",
@@ -337,6 +338,23 @@ async function main() {
       await client.query(`ALTER TABLE IF EXISTS public."${table}" ENABLE ROW LEVEL SECURITY`);
     }
     console.log(`✓ RLS abilitata su ${APP_TABLES.length} tabelle`);
+
+    // 1-bis. I materiali caricati prima dell'introduzione dell'autore non hanno
+    // un docente proprietario: senza di lui resterebbero invisibili a tutti.
+    // Li assegna al docente titolare della prima classe a cui sono collegati.
+    const { rowCount: adopted } = await client.query(`
+      UPDATE materials m
+         SET teacher_id = c.teacher_id
+        FROM material_classes mc
+        JOIN classes c ON c.id = mc.class_id
+       WHERE m.teacher_id IS NULL
+         AND mc.material_id = m.id
+    `);
+    console.log(
+      adopted
+        ? `✓ Materiali preesistenti assegnati al loro docente: ${adopted}`
+        : "✓ Nessun materiale da riassegnare",
+    );
 
     // 2. Bucket Supabase Storage (solo se lo schema storage esiste, cioe' su Supabase)
     const { rows: storageSchema } = await client.query(
