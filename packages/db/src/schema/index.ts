@@ -3,6 +3,7 @@ export * from "./institutionMembers";
 export * from "./teachers";
 export * from "./classes";
 export * from "./students";
+export * from "./studentNotes";
 export * from "./classJoinRequests";
 export * from "./classPosts";
 export * from "./materials";
