@@ -25,6 +25,7 @@ const APP_TABLES = [
   "teachers",
   "classes",
   "students",
+  "student_notes",
   "class_join_requests",
   "class_posts",
   "class_post_reads",

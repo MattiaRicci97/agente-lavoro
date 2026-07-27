@@ -68,7 +68,13 @@ router.post("/materials/:id/oral-sessions", requireAuth, async (req, res): Promi
 
   const [session] = await db
     .insert(oralSessionsTable)
-    .values({ materialId: material.id, studentName: student.name, status: "in_corso" })
+    .values({
+      materialId: material.id,
+      authUserId: req.authUserId!,
+      classId: student.classId,
+      studentName: student.name,
+      status: "in_corso",
+    })
     .returning();
 
   const turn = await nextOralExamTurn(material.title, material.subject, material.content, []);

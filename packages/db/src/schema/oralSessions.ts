@@ -15,6 +15,9 @@ export const oralSessionsTable = pgTable("oral_sessions", {
   materialId: integer("material_id")
     .notNull()
     .references(() => materialsTable.id, { onDelete: "cascade" }),
+  /** Identita' dello studente: il nome da solo non basta (esistono omonimi). */
+  authUserId: text("auth_user_id"),
+  classId: integer("class_id"),
   studentName: text("student_name").notNull(),
   status: text("status").notNull().default("in_corso"),
   // --- Proposta dell'assistente ---

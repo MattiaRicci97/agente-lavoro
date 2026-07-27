@@ -210,6 +210,8 @@ router.post("/materials/:id/quiz-attempts", requireAuth, async (req, res): Promi
     .insert(quizAttemptsTable)
     .values({
       materialId: material.id,
+      authUserId: req.authUserId!,
+      classId: student.classId,
       studentName: parsed.data.studentName,
       score,
       total: gradedAnswers.length,

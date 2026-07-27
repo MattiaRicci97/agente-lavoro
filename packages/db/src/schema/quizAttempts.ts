@@ -17,6 +17,9 @@ export const quizAttemptsTable = pgTable("quiz_attempts", {
   materialId: integer("material_id")
     .notNull()
     .references(() => materialsTable.id, { onDelete: "cascade" }),
+  /** Identita' dello studente: il nome da solo non basta (esistono omonimi). */
+  authUserId: text("auth_user_id"),
+  classId: integer("class_id"),
   studentName: text("student_name").notNull(),
   score: integer("score").notNull(),
   total: integer("total").notNull(),
