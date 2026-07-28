@@ -33,12 +33,56 @@ function bearerToken(req: Request): string | null {
   return token || null;
 }
 
+/**
+ * Cache della verifica del token.
+ *
+ * Validare un token significa chiamare Supabase Auth via HTTPS: un viaggio di
+ * rete prima ancora di toccare il database. Una schermata dell'app fa diverse
+ * chiamate API, e ognuna ripeteva quella verifica: erano secondi di attesa
+ * spesi solo per richiedersi chi fosse l'utente.
+ *
+ * Il token resta valido per un'ora, quindi tenerne l'esito per un minuto e'
+ * prudente: al massimo un utente disconnesso continua a passare per 60 secondi.
+ * Il profilo (nome, ruolo, BES/DSA) viene invalidato esplicitamente quando
+ * cambia, cosi' le modifiche si vedono subito.
+ */
+const TOKEN_TTL_MS = 60_000;
+const tokenCache = new Map<string, { user: AuthUser; expiresAt: number }>();
+
+/** Dimentica l'esito per un token: da chiamare quando il profilo cambia. */
+export function forgetCachedUser(authUserId: string): void {
+  for (const [token, entry] of tokenCache) {
+    if (entry.user.id === authUserId) tokenCache.delete(token);
+  }
+}
+
+function cacheUser(token: string, user: AuthUser): void {
+  // Tetto di sicurezza: senza, in un processo di lunga durata la mappa cresce.
+  if (tokenCache.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of tokenCache) if (v.expiresAt < now) tokenCache.delete(k);
+    if (tokenCache.size > 500) tokenCache.clear();
+  }
+  tokenCache.set(token, { user, expiresAt: Date.now() + TOKEN_TTL_MS });
+}
+
 async function authenticate(req: Request): Promise<AuthUser | null> {
   const token = bearerToken(req);
   if (!token) return null;
 
+  const cached = tokenCache.get(token);
+  if (cached && cached.expiresAt > Date.now()) {
+    req.authUserId = cached.user.id;
+    req.accessToken = token;
+    req.authUser = cached.user;
+    return cached.user;
+  }
+
   const { data, error } = await supabaseAnon.auth.getUser(token);
-  if (error || !data.user) return null;
+  if (error || !data.user) {
+    tokenCache.delete(token);
+    return null;
+  }
 
   const meta = (data.user.user_metadata ?? {}) as Record<string, unknown>;
   const email = data.user.email ?? "";
@@ -54,6 +98,7 @@ async function authenticate(req: Request): Promise<AuthUser | null> {
     role,
     besDsa: meta.bes_dsa === true,
   };
+  cacheUser(token, req.authUser);
   return req.authUser;
 }
 

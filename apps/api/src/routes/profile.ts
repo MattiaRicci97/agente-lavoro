@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, teachersTable, studentsTable } from "@sillabo/db";
-import { requireAuth, requireTeacher } from "../middlewares/auth";
+import { requireAuth, requireTeacher, forgetCachedUser } from "../middlewares/auth";
 import { updateUserMetadata } from "../lib/supabase";
 
 const router: IRouter = Router();
@@ -54,6 +54,7 @@ router.patch("/teachers/me", requireTeacher, async (req, res): Promise<void> => 
   if (name !== undefined) {
     try {
       await updateUserMetadata(req.accessToken!, { full_name: name });
+      forgetCachedUser(req.authUserId!);
     } catch (err) {
       req.log.warn({ err }, "Non sono riuscito ad allineare il nome nei metadati utente");
     }
@@ -90,6 +91,7 @@ router.patch("/students/me", requireAuth, async (req, res): Promise<void> => {
   if (Object.keys(metaUpdate).length > 0) {
     try {
       await updateUserMetadata(req.accessToken!, metaUpdate);
+      forgetCachedUser(req.authUserId!);
     } catch (err) {
       req.log.error({ err }, "Aggiornamento profilo studente fallito");
       res.status(500).json({ error: "Impossibile salvare il profilo. Riprova." });

@@ -344,6 +344,37 @@ async function main() {
     }
     console.log(`✓ RLS abilitata su ${APP_TABLES.length} tabelle`);
 
+    // 1-quater. Indici sulle colonne che l'app interroga a ogni richiesta.
+    // Drizzle crea gli indici solo per chiavi e vincoli di unicita': le ricerche
+    // per chiave esterna (ad es. "in quali classi insegna questo docente")
+    // finivano in scansioni sequenziali, che crescono con i dati della scuola.
+    const INDEXES: Array<[string, string]> = [
+      ["class_teachers_teacher_idx", "class_teachers (teacher_id)"],
+      ["students_class_idx", "students (class_id)"],
+      ["material_classes_class_idx", "material_classes (class_id)"],
+      ["materials_teacher_idx", "materials (teacher_id)"],
+      ["questions_material_idx", "questions (material_id)"],
+      ["quiz_attempts_material_idx", "quiz_attempts (material_id)"],
+      ["quiz_attempts_user_idx", "quiz_attempts (auth_user_id)"],
+      ["oral_sessions_material_idx", "oral_sessions (material_id)"],
+      ["oral_sessions_user_idx", "oral_sessions (auth_user_id)"],
+      ["photo_corrections_class_idx", "photo_corrections (class_id)"],
+      ["photo_corrections_user_idx", "photo_corrections (auth_user_id)"],
+      ["written_exams_material_idx", "written_exams (material_id)"],
+      ["written_exam_submissions_user_idx", "written_exam_submissions (auth_user_id)"],
+      ["class_post_reads_user_idx", "class_post_reads (auth_user_id)"],
+      ["class_post_comments_post_idx", "class_post_comments (post_id)"],
+      ["exam_dates_class_idx", "exam_dates (class_id)"],
+      ["review_items_material_idx", "review_items (material_id)"],
+      ["institution_members_teacher_idx", "institution_members (teacher_id)"],
+      ["student_notes_student_idx", "student_notes (student_id, teacher_id)"],
+      ["class_join_requests_class_idx", "class_join_requests (class_id)"],
+    ];
+    for (const [name, target] of INDEXES) {
+      await client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${target}`);
+    }
+    console.log(`\u2713 Indici di ricerca verificati: ${INDEXES.length}`);
+
     // 1-bis. Prima del consiglio di classe una classe apparteneva a un solo
     // docente (classes.teacher_id). Quel docente diventa il coordinatore, cosi'
     // non perde l'accesso alle proprie classi.
