@@ -19,7 +19,7 @@ import {
   ApproveJoinRequestResponse,
   RejectJoinRequestResponse,
 } from "@sillabo/api-zod";
-import { requireAuth, requireTeacher, type AuthUser } from "../middlewares/auth";
+import { requireAuth, requireTeacher, type AuthUser, forgetCachedUser } from "../middlewares/auth";
 import { updateUserMetadata } from "../lib/supabase";
 import { teacherClassIds } from "../lib/classAccess";
 
@@ -87,6 +87,7 @@ router.post("/onboarding/role", requireAuth, async (req, res): Promise<void> => 
   // Salva il ruolo nei metadati dell'utente Supabase, agendo con il suo stesso token.
   try {
     await updateUserMetadata(req.accessToken!, { role: parsed.data.role });
+      forgetCachedUser(req.authUserId!);
   } catch (err) {
     req.log.error({ err }, "Failed to persist role in user metadata");
     res.status(500).json({ error: "Impossibile salvare il ruolo. Riprova." });

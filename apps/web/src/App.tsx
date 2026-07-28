@@ -41,7 +41,24 @@ import StudioFinEd from "./pages/StudioFinEd";
 import StudioFinEdLesson from "./pages/StudioFinEdLesson";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const queryClient = new QueryClient();
+/**
+ * Con le impostazioni predefinite ogni dato e' considerato scaduto subito:
+ * cambiando sezione l'app rifaceva TUTTE le chiamate, comprese quelle delle
+ * pastiglie presenti in ogni pagina, e ogni schermata ripartiva dallo
+ * scheletro grigio. Trenta secondi di validita' bastano perche' la
+ * navigazione sia immediata, restando dati freschi: chi scrive invalida
+ * comunque le proprie query subito dopo aver salvato.
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 function AuthQueryCacheInvalidator() {
   const { user } = useAuth();

@@ -83,25 +83,61 @@ export interface RegistroEntry {
   signedBy: string | null;
 }
 
+/** Media dei voti firmati, arrotondata a un decimale. */
+function average(entries: RegistroEntry[]): number | null {
+  const graded = entries.filter((e) => e.grade !== null);
+  if (!graded.length) return null;
+  return Math.round((graded.reduce((s, e) => s + (e.grade ?? 0), 0) / graded.length) * 10) / 10;
+}
+
 /**
- * Le prove firmate di uno studente, in ordine di data.
- * Le tabelle storiche identificano lo studente per nome: dove c'e' l'utente
- * si usa quello, altrimenti si ricade sul nome dentro la sua classe.
+ * Le prove firmate di un'intera classe, raccolte per studente.
+ *
+ * Farlo studente per studente significava tre query a testa: con 25 alunni
+ * erano 75 viaggi verso il database, e il registro impiegava secondi ad aprirsi.
+ * Qui si legge tutto in tre query e si raggruppa in memoria.
  */
-async function signedEntries(student: {
-  id: number;
-  name: string;
-  authUserId: string | null;
-  classId: number;
-}): Promise<RegistroEntry[]> {
-  const byUserOrName = (userCol: any, nameCol: any, classCol: any) =>
-    student.authUserId
-      ? or(eq(userCol, student.authUserId), and(eq(nameCol, student.name), eq(classCol, student.classId)))!
-      : and(eq(nameCol, student.name), eq(classCol, student.classId))!;
+async function signedEntriesByStudent(
+  roster: Array<{ id: number; name: string; authUserId: string | null; classId: number }>,
+): Promise<Map<number, RegistroEntry[]>> {
+  const result = new Map<number, RegistroEntry[]>(roster.map((s) => [s.id, []]));
+  if (!roster.length) return result;
+
+  const classIds = Array.from(new Set(roster.map((s) => s.classId)));
+  const userIds = roster.map((s) => s.authUserId).filter((x): x is string => !!x);
+  const names = roster.map((s) => s.name);
+
+  /** A chi appartiene una prova: prima l'utente, poi il nome dentro la classe. */
+  const byUser = new Map(roster.filter((s) => s.authUserId).map((s) => [s.authUserId!, s.id]));
+  const byNameAndClass = new Map(roster.map((s) => [`${s.classId}|${s.name}`, s.id]));
+  const owner = (authUserId: string | null, name: string, classId: number | null): number | null => {
+    if (authUserId) {
+      const byId = byUser.get(authUserId);
+      if (byId !== undefined) return byId;
+    }
+    return byNameAndClass.get(`${classId}|${name}`) ?? null;
+  };
+
+  // Un solo filtro per tabella: o l'utente e' fra i nostri, o lo e' il nome
+  // dentro una delle classi in esame (per le righe piu' vecchie senza utente).
+  const scope = (userCol: any, nameCol: any, classCol: any) =>
+    userIds.length
+      ? or(inArray(userCol, userIds), and(inArray(nameCol, names), inArray(classCol, classIds)))!
+      : and(inArray(nameCol, names), inArray(classCol, classIds))!;
+
+  const push = (studentId: number | null, entry: RegistroEntry) => {
+    if (studentId === null) return;
+    result.get(studentId)?.push(entry);
+  };
+
+  const iso = (d: Date | null, fallback: Date) => (d ?? fallback).toISOString();
 
   const photos = await db
     .select({
       id: photoCorrectionsTable.id,
+      authUserId: photoCorrectionsTable.authUserId,
+      studentName: photoCorrectionsTable.studentName,
+      classId: photoCorrectionsTable.classId,
       date: photoCorrectionsTable.validatedAt,
       created: photoCorrectionsTable.createdAt,
       subject: photoCorrectionsTable.subject,
@@ -115,7 +151,7 @@ async function signedEntries(student: {
     .where(
       and(
         eq(photoCorrectionsTable.validationStatus, "validata"),
-        byUserOrName(
+        scope(
           photoCorrectionsTable.authUserId,
           photoCorrectionsTable.studentName,
           photoCorrectionsTable.classId,
@@ -123,9 +159,25 @@ async function signedEntries(student: {
       ),
     );
 
+  for (const p of photos) {
+    push(owner(p.authUserId, p.studentName, p.classId), {
+      kind: "compito",
+      id: p.id,
+      date: iso(p.date, p.created),
+      subject: p.subject,
+      title: p.title?.slice(0, 120) || "Compito fotografato",
+      grade: p.grade,
+      feedback: p.feedback,
+      signedBy: p.signedBy,
+    });
+  }
+
   const orals = await db
     .select({
       id: oralSessionsTable.id,
+      authUserId: oralSessionsTable.authUserId,
+      studentName: oralSessionsTable.studentName,
+      classId: oralSessionsTable.classId,
       date: oralSessionsTable.validatedAt,
       created: oralSessionsTable.createdAt,
       subject: materialsTable.subject,
@@ -140,13 +192,29 @@ async function signedEntries(student: {
     .where(
       and(
         eq(oralSessionsTable.validationStatus, "validata"),
-        byUserOrName(oralSessionsTable.authUserId, oralSessionsTable.studentName, oralSessionsTable.classId),
+        scope(oralSessionsTable.authUserId, oralSessionsTable.studentName, oralSessionsTable.classId),
       ),
     );
+
+  for (const o of orals) {
+    push(owner(o.authUserId, o.studentName, o.classId), {
+      kind: "interrogazione",
+      id: o.id,
+      date: iso(o.date, o.created),
+      subject: o.subject,
+      title: o.title,
+      grade: o.grade,
+      feedback: o.feedback,
+      signedBy: o.signedBy,
+    });
+  }
 
   const writtens = await db
     .select({
       id: writtenExamSubmissionsTable.id,
+      authUserId: writtenExamSubmissionsTable.authUserId,
+      studentName: writtenExamSubmissionsTable.studentName,
+      classId: writtenExamSubmissionsTable.classId,
       date: writtenExamSubmissionsTable.validatedAt,
       created: writtenExamSubmissionsTable.createdAt,
       subject: materialsTable.subject,
@@ -157,13 +225,13 @@ async function signedEntries(student: {
       signedBy: teachersTable.name,
     })
     .from(writtenExamSubmissionsTable)
-    .leftJoin(teachersTable, eq(teachersTable.id, writtenExamSubmissionsTable.validatedByTeacherId))
     .innerJoin(writtenExamsTable, eq(writtenExamsTable.id, writtenExamSubmissionsTable.examId))
     .innerJoin(materialsTable, eq(materialsTable.id, writtenExamsTable.materialId))
+    .leftJoin(teachersTable, eq(teachersTable.id, writtenExamSubmissionsTable.validatedByTeacherId))
     .where(
       and(
         eq(writtenExamSubmissionsTable.validationStatus, "validata"),
-        byUserOrName(
+        scope(
           writtenExamSubmissionsTable.authUserId,
           writtenExamSubmissionsTable.studentName,
           writtenExamSubmissionsTable.classId,
@@ -171,31 +239,9 @@ async function signedEntries(student: {
       ),
     );
 
-  const iso = (d: Date | null, fallback: Date) => (d ?? fallback).toISOString();
-
-  const entries: RegistroEntry[] = [
-    ...photos.map((p) => ({
-      kind: "compito" as const,
-      id: p.id,
-      date: iso(p.date, p.created),
-      subject: p.subject,
-      title: p.title?.slice(0, 120) || "Compito fotografato",
-      grade: p.grade,
-      feedback: p.feedback,
-      signedBy: p.signedBy,
-    })),
-    ...orals.map((o) => ({
-      kind: "interrogazione" as const,
-      id: o.id,
-      date: iso(o.date, o.created),
-      subject: o.subject,
-      title: o.title,
-      grade: o.grade,
-      feedback: o.feedback,
-      signedBy: o.signedBy,
-    })),
-    ...writtens.map((w) => ({
-      kind: "elaborato" as const,
+  for (const w of writtens) {
+    push(owner(w.authUserId, w.studentName, w.classId), {
+      kind: "elaborato",
       id: w.id,
       date: iso(w.date, w.created),
       subject: w.subject,
@@ -203,17 +249,11 @@ async function signedEntries(student: {
       grade: w.grade,
       feedback: w.feedback,
       signedBy: w.signedBy,
-    })),
-  ];
+    });
+  }
 
-  return entries.sort((a, b) => b.date.localeCompare(a.date));
-}
-
-/** Media dei voti firmati, arrotondata a un decimale. */
-function average(entries: RegistroEntry[]): number | null {
-  const graded = entries.filter((e) => e.grade !== null);
-  if (!graded.length) return null;
-  return Math.round((graded.reduce((s, e) => s + (e.grade ?? 0), 0) / graded.length) * 10) / 10;
+  for (const list of result.values()) list.sort((a, b) => b.date.localeCompare(a.date));
+  return result;
 }
 
 /** Il registro di una classe: una riga per studente. */
@@ -236,18 +276,18 @@ router.get("/classes/:id/registro", requireTeacher, async (req, res): Promise<vo
     .where(eq(studentsTable.classId, classId))
     .orderBy(studentsTable.name);
 
-  const rows = [];
-  for (const s of roster) {
-    const entries = await signedEntries(s);
-    rows.push({
+  const entriesByStudent = await signedEntriesByStudent(roster);
+  const rows = roster.map((s) => {
+    const entries = entriesByStudent.get(s.id) ?? [];
+    return {
       studentId: s.id,
       name: s.name,
       besDsa: s.besDsa,
       average: average(entries),
       gradesCount: entries.filter((e) => e.grade !== null).length,
       lastDate: entries[0]?.date ?? null,
-    });
-  }
+    };
+  });
 
   res.json({
     class: { id: cls.id, name: cls.name, gradeLevel: cls.gradeLevel },
@@ -269,7 +309,7 @@ router.get("/students/:id/registro", requireTeacher, async (req, res): Promise<v
     return;
   }
 
-  const entries = await signedEntries(student);
+  const entries = (await signedEntriesByStudent([student])).get(student.id) ?? [];
 
   // I quiz sono esercitazione, non valutazione: restano contati a parte.
   const attempts = await db
@@ -405,9 +445,10 @@ router.get("/classes/:id/registro/export", requireTeacher, async (req, res): Pro
     .where(eq(studentsTable.classId, classId))
     .orderBy(studentsTable.name);
 
+  const entriesByStudent = await signedEntriesByStudent(roster);
   const lines = ["Studente;Data;Tipo;Materia;Prova;Voto;Firmato da"];
   for (const s of roster) {
-    for (const e of (await signedEntries(s)).filter((x) => x.grade !== null)) {
+    for (const e of (entriesByStudent.get(s.id) ?? []).filter((x) => x.grade !== null)) {
       lines.push(
         [
           csvCell(s.name),
