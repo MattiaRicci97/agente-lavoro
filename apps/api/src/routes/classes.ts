@@ -434,4 +434,63 @@ router.post("/classes/:id/students", requireTeacher, async (req, res): Promise<v
   res.status(201).json(CreateStudentResponse.parse(student));
 });
 
+/**
+ * Import dell'elenco alunni: si incolla la lista (una riga per studente,
+ * eventualmente "Nome; BES") invece di aggiungerli uno a uno.
+ *
+ * Crea le anagrafiche senza account: la classe compare subito completa nel
+ * registro. Quando poi lo studente si iscrive col codice, viene agganciato
+ * alla sua riga per nome invece di crearne una nuova (vedi l'approvazione).
+ */
+const ImportStudentsSchema = z.object({
+  students: z
+    .array(z.object({ name: z.string().trim().min(1).max(120), besDsa: z.boolean().default(false) }))
+    .min(1)
+    .max(200),
+});
+
+router.post("/classes/:id/students/import", requireTeacher, async (req, res): Promise<void> => {
+  const classId = Number(req.params.id);
+  if (!Number.isInteger(classId)) {
+    res.status(400).json({ error: "id non valido" });
+    return;
+  }
+  const parsed = ImportStudentsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (!(await isClassTeacher(req.teacher!.id, classId))) {
+    res.status(404).json({ error: "Classe non trovata" });
+    return;
+  }
+
+  // Nomi gia' presenti in classe (confronto senza distinzione di maiuscole).
+  const existing = await db
+    .select({ name: studentsTable.name })
+    .from(studentsTable)
+    .where(eq(studentsTable.classId, classId));
+  const present = new Set(existing.map((s) => s.name.trim().toLowerCase()));
+
+  // Deduplica anche all'interno della lista incollata.
+  const toInsert: Array<{ classId: number; name: string; besDsa: boolean }> = [];
+  const seen = new Set<string>();
+  let skipped = 0;
+  for (const s of parsed.data.students) {
+    const key = s.name.trim().toLowerCase();
+    if (present.has(key) || seen.has(key)) {
+      skipped += 1;
+      continue;
+    }
+    seen.add(key);
+    toInsert.push({ classId, name: s.name.trim(), besDsa: s.besDsa });
+  }
+
+  const created = toInsert.length
+    ? await db.insert(studentsTable).values(toInsert).returning()
+    : [];
+
+  res.status(201).json({ created: created.length, skipped, students: created });
+});
+
 export default router;

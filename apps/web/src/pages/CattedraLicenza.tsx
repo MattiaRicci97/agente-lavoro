@@ -27,6 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { InvitiDocenti } from "@/components/InvitiDocenti";
 import {
   Building2,
   KeyRound,
@@ -478,6 +479,8 @@ export default function CattedraLicenza() {
             </div>
           </CardContent>
         </Card>
+
+        {data.isAdmin && <InvitiDocenti institutionId={institutionId} />}
       </div>
 
       <AlertDialog open={!!toRemove} onOpenChange={(open) => !open && setToRemove(null)}>

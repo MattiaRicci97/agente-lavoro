@@ -11,6 +11,7 @@ import Home from "./pages/Home";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
 import Onboarding from "./pages/Onboarding";
+import Invito, { PENDING_INVITE_KEY } from "./pages/Invito";
 import JoinClass from "./pages/JoinClass";
 import CattedraDashboard from "./pages/CattedraDashboard";
 import CattedraClassi from "./pages/CattedraClassi";
@@ -145,6 +146,12 @@ function HomeRedirect() {
 function PostLoginRedirect() {
   const { data: me, isLoading, isError } = useGetMe();
 
+  // Chi arriva da un link d'invito torna alla pagina dell'invito per accettarlo,
+  // prima ancora di passare dall'onboarding: e' l'invito a dargli ruolo e classe.
+  const pendingInvite =
+    typeof window !== "undefined" ? localStorage.getItem(PENDING_INVITE_KEY) : null;
+  if (pendingInvite) return <Redirect to={`/invito/${pendingInvite}`} />;
+
   if (isError) return <GateError />;
   if (isLoading || !me) return <FullScreenLoader />;
   if (!me.role) return <Redirect to="/onboarding" />;
@@ -165,6 +172,8 @@ function Router() {
           <Onboarding />
         </AuthedAllowUnroledGate>
       </Route>
+
+      <Route path="/invito/:token" component={Invito} />
 
       <Route path="/entra-in-classe">
         <StudentJoinGate>

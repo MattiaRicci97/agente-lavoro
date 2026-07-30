@@ -254,10 +254,32 @@ router.post("/join-requests/:id/approve", requireTeacher, async (req, res): Prom
     .where(and(eq(studentsTable.classId, cls.id), eq(studentsTable.authUserId, joinRequest.authUserId)));
 
   if (!student) {
-    [student] = await db
-      .insert(studentsTable)
-      .values({ classId: cls.id, authUserId: joinRequest.authUserId, name: joinRequest.studentName })
-      .returning();
+    // Se la classe e' stata precaricata (import CSV), c'e' gia' un'anagrafica
+    // con questo nome ma senza account: la si aggancia invece di duplicarla.
+    const [preloaded] = await db
+      .select()
+      .from(studentsTable)
+      .where(
+        and(
+          eq(studentsTable.classId, cls.id),
+          isNull(studentsTable.authUserId),
+          sql`lower(${studentsTable.name}) = lower(${joinRequest.studentName})`,
+        ),
+      )
+      .limit(1);
+
+    if (preloaded) {
+      [student] = await db
+        .update(studentsTable)
+        .set({ authUserId: joinRequest.authUserId })
+        .where(eq(studentsTable.id, preloaded.id))
+        .returning();
+    } else {
+      [student] = await db
+        .insert(studentsTable)
+        .values({ classId: cls.id, authUserId: joinRequest.authUserId, name: joinRequest.studentName })
+        .returning();
+    }
   }
 
   const [updated] = await db
