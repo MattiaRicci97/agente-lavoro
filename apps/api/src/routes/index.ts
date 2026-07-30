@@ -22,6 +22,7 @@ import institutionMembersRouter from "./institutionMembers";
 import classPostsRouter from "./classPosts";
 import registroRouter from "./registro";
 import invitesRouter from "./invites";
+import scrutiniRouter from "./scrutini";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use(institutionMembersRouter);
 router.use(classPostsRouter);
 router.use(registroRouter);
 router.use(invitesRouter);
+router.use(scrutiniRouter);
 
 export default router;

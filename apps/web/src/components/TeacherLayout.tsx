@@ -12,6 +12,7 @@ import {
   KeyRound,
   Megaphone,
   ClipboardList,
+  Gavel,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,7 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
           <NavItem href="/cattedra/classi" icon={GraduationCap} label="Le mie classi" active={location === "/cattedra/classi"} />
           <NavItem href="/cattedra/bacheca" icon={Megaphone} label="Bacheca" active={location === "/cattedra/bacheca"} />
           <NavItem href="/cattedra/registro" icon={ClipboardList} label="Registro" active={location.startsWith("/cattedra/registro")} />
+          <NavItem href="/cattedra/scrutinio" icon={Gavel} label="Scrutinio" active={location === "/cattedra/scrutinio"} />
           <NavItem
             href="/cattedra/validazioni"
             icon={Stamp}
