@@ -21,6 +21,7 @@ import validationsRouter from "./validations";
 import institutionMembersRouter from "./institutionMembers";
 import classPostsRouter from "./classPosts";
 import registroRouter from "./registro";
+import invitesRouter from "./invites";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(validationsRouter);
 router.use(institutionMembersRouter);
 router.use(classPostsRouter);
 router.use(registroRouter);
+router.use(invitesRouter);
 
 export default router;

@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, GraduationCap, Loader2, Users, Copy, Check, Plus, CalendarDays, Trash2 } from "lucide-react";
 import { ConsiglioDiClasse, ClassiDaRaggiungere } from "@/components/ConsiglioDiClasse";
+import { ImportaStudenti } from "@/components/ImportaStudenti";
 
 interface ExamDateRow {
   id: number;
@@ -446,6 +447,7 @@ function ClassesSection({ institutionId }: { institutionId: number }) {
                     <JoinCode code={c.joinCode} />
                   </div>
                   <ConsiglioDiClasse classId={c.id} />
+                  <ImportaStudenti classId={c.id} />
                 </CardContent>
               </Card>
             ))}

@@ -48,6 +48,7 @@ const APP_TABLES = [
   "module_lesson_progress",
   "photo_corrections",
   "institution_members",
+  "invites",
 ];
 
 const MODULE_CATALOG: Array<{
@@ -369,6 +370,7 @@ async function main() {
       ["institution_members_teacher_idx", "institution_members (teacher_id)"],
       ["student_notes_student_idx", "student_notes (student_id, teacher_id)"],
       ["class_join_requests_class_idx", "class_join_requests (class_id)"],
+      ["invites_institution_idx", "invites (institution_id)"],
     ];
     for (const [name, target] of INDEXES) {
       await client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${target}`);
