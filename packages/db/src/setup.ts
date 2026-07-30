@@ -27,6 +27,8 @@ const APP_TABLES = [
   "class_teachers",
   "students",
   "student_notes",
+  "scrutini",
+  "scrutinio_entries",
   "class_join_requests",
   "class_posts",
   "class_post_reads",
@@ -371,6 +373,8 @@ async function main() {
       ["student_notes_student_idx", "student_notes (student_id, teacher_id)"],
       ["class_join_requests_class_idx", "class_join_requests (class_id)"],
       ["invites_institution_idx", "invites (institution_id)"],
+      ["scrutini_class_idx", "scrutini (class_id)"],
+      ["scrutinio_entries_scrutinio_idx", "scrutinio_entries (scrutinio_id)"],
     ];
     for (const [name, target] of INDEXES) {
       await client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${target}`);

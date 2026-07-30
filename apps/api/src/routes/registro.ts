@@ -84,7 +84,7 @@ export interface RegistroEntry {
 }
 
 /** Media dei voti firmati, arrotondata a un decimale. */
-function average(entries: RegistroEntry[]): number | null {
+export function average(entries: RegistroEntry[]): number | null {
   const graded = entries.filter((e) => e.grade !== null);
   if (!graded.length) return null;
   return Math.round((graded.reduce((s, e) => s + (e.grade ?? 0), 0) / graded.length) * 10) / 10;
@@ -97,7 +97,7 @@ function average(entries: RegistroEntry[]): number | null {
  * erano 75 viaggi verso il database, e il registro impiegava secondi ad aprirsi.
  * Qui si legge tutto in tre query e si raggruppa in memoria.
  */
-async function signedEntriesByStudent(
+export async function signedEntriesByStudent(
   roster: Array<{ id: number; name: string; authUserId: string | null; classId: number }>,
 ): Promise<Map<number, RegistroEntry[]>> {
   const result = new Map<number, RegistroEntry[]>(roster.map((s) => [s.id, []]));

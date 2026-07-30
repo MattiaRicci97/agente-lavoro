@@ -476,3 +476,75 @@ export async function draftClassNotice(
   }
   return extractJson<NoticeDraftResult>(textBlock.text);
 }
+
+export interface GiudizioResult {
+  giudizio: string;
+}
+
+/**
+ * Bozza del giudizio globale per lo scrutinio.
+ *
+ * Non e' un verdetto: e' una prima stesura che il consiglio rilegge, corregge
+ * e approva. Per questo il prompt e' scritto in modo restrittivo:
+ *
+ *  - si basa SOLO sui numeri forniti, e non deve inventare episodi o qualita';
+ *  - non propone ammissione o non ammissione, che restano decisioni del
+ *    consiglio con valore legale;
+ *  - non formula ipotesi diagnostiche ne' giudizi sulla persona;
+ *  - se i dati sono pochi, lo dice invece di riempire di frasi fatte.
+ */
+export async function draftGiudizio(input: {
+  studentName: string;
+  className: string;
+  gradeLevel: string;
+  periodLabel: string;
+  bySubject: Array<{ subject: string; average: number; count: number }>;
+  overallAverage: number | null;
+  gradesCount: number;
+  trend: { first: number; last: number } | null;
+  practice: { attempts: number; accuracyPercent: number | null };
+}): Promise<GiudizioResult> {
+  const materie = input.bySubject.length
+    ? input.bySubject.map((s) => `${s.subject}: media ${s.average} su ${s.count} prove`).join("; ")
+    : "nessuna prova valutata";
+  const andamento = input.trend
+    ? `primo voto del periodo ${input.trend.first}, ultimo ${input.trend.last}`
+    : "andamento non ricostruibile (meno di due prove)";
+  const impegno = input.practice.attempts
+    ? `${input.practice.attempts} esercitazioni autonome svolte, ${input.practice.accuracyPercent ?? "n/d"}% di risposte corrette`
+    : "nessuna esercitazione autonoma registrata";
+
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 500,
+    system:
+      "Scrivi la bozza del giudizio globale per lo scrutinio di una scuola superiore italiana. " +
+      "Usa il registro sobrio e descrittivo dei documenti scolastici, in terza persona, 3-5 frasi. " +
+      "REGOLE VINCOLANTI: " +
+      "1) Basati esclusivamente sui dati forniti: non inventare episodi, atteggiamenti, qualita' o difficolta' che non risultino dai numeri. " +
+      "2) NON proporre l'ammissione o la non ammissione alla classe successiva, e non usare formule come 'si propone la promozione': la decisione spetta al consiglio. " +
+      "3) Non formulare ipotesi diagnostiche, non parlare di disturbi o certificazioni, non giudicare la persona: parla del rendimento osservato. " +
+      "4) Se le prove sono poche, scrivilo con franchezza invece di riempire con frasi di circostanza. " +
+      "5) Cita le materie per nome quando i dati lo consentono. " +
+      "Rispondi SOLO con JSON valido.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Studente: ${input.studentName}\nClasse: ${input.className} (${input.gradeLevel})\nPeriodo: ${input.periodLabel}\n` +
+          `Valutazioni firmate dai docenti: ${input.gradesCount}\n` +
+          `Medie per materia: ${materie}\n` +
+          `Media complessiva: ${input.overallAverage ?? "non calcolabile"}\n` +
+          `Andamento: ${andamento}\n` +
+          `Impegno autonomo: ${impegno}\n\n` +
+          `Rispondi con JSON: {"giudizio": "testo del giudizio"}`,
+      },
+    ],
+  });
+
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("Anthropic non ha restituito testo");
+  }
+  return extractJson<GiudizioResult>(textBlock.text);
+}

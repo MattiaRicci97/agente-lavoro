@@ -6,6 +6,7 @@ export * from "./classes";
 export * from "./classTeachers";
 export * from "./students";
 export * from "./studentNotes";
+export * from "./scrutini";
 export * from "./classJoinRequests";
 export * from "./classPosts";
 export * from "./materials";
