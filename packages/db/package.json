@@ -13,7 +13,9 @@
     "push": "drizzle-kit push",
     "generate": "drizzle-kit generate",
     "setup": "drizzle-kit push --force && tsx src/setup.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "demo:seed": "tsx src/demo.ts seed",
+    "demo:clean": "tsx src/demo.ts clean"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
