@@ -10,7 +10,9 @@
     "build": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck",
     "db:push": "pnpm --filter @sillabo/db run push",
-    "db:setup": "pnpm --filter @sillabo/db run setup"
+    "db:setup": "pnpm --filter @sillabo/db run setup",
+    "demo:seed": "pnpm --filter @sillabo/db run demo:seed",
+    "demo:clean": "pnpm --filter @sillabo/db run demo:clean"
   },
   "devDependencies": {
     "esbuild": "^0.25.12",
