@@ -25,6 +25,7 @@ import invitesRouter from "./invites";
 import scrutiniRouter from "./scrutini";
 import objectivesRouter from "./objectives";
 import recoveryRouter from "./recovery";
+import classMapRouter from "./classMap";
 
 const router: IRouter = Router();
 
@@ -54,5 +55,6 @@ router.use(invitesRouter);
 router.use(scrutiniRouter);
 router.use(objectivesRouter);
 router.use(recoveryRouter);
+router.use(classMapRouter);
 
 export default router;

@@ -66,6 +66,7 @@ const APP_TABLES = [
   "recovery_questions",
   "recovery_items",
   "student_notices",
+  "recovery_activities",
 ];
 
 const MODULE_CATALOG: Array<{

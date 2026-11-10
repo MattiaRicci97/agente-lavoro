@@ -749,3 +749,46 @@ export async function generateRecoveryQuestions(input: {
     input.objectives.map((o) => o.code),
   );
 }
+
+export const ActivityDraftSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  activity: z.string().trim().min(20).max(4000),
+});
+
+/**
+ * Bozza di un'attivita' di circa dieci minuti per riprendere in classe un
+ * obiettivo. Al modello arrivano l'obiettivo, l'errore piu' frequente e quanti
+ * studenti sono coinvolti: nessun nome. La conduce il docente, che la adatta.
+ */
+export async function draftRecoveryActivity(input: {
+  subject: string;
+  gradeLevel: string;
+  objective: { code: string; title: string; description: string };
+  commonError: string | null;
+  groupSize: number;
+  classSize: number;
+}): Promise<{ title: string; activity: string }> {
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 1500,
+    system:
+      "Sei un docente italiano di scuola superiore esperto di didattica. Prepari la traccia di un'attivita' di circa dieci minuti che un collega condurra' in classe per riprendere un obiettivo. " +
+      "Scrivi in modo operativo: cosa fa il docente, cosa fanno gli studenti, con tempi indicativi e un esempio concreto. Niente tecnologia obbligatoria. Rispondi SOLO con JSON valido.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Materia: ${input.subject}\nClasse: ${input.gradeLevel} (${input.classSize} studenti)\n` +
+          `Obiettivo: ${input.objective.title}. ${input.objective.description}\n` +
+          `Studenti che devono riprenderlo: ${input.groupSize}\n` +
+          (input.commonError ? `Errore piu' frequente: ${input.commonError}\n` : "") +
+          `\nRispondi con JSON: {"title": "titolo breve", "activity": "traccia dell'attivita' in testo semplice, con i tempi"}`,
+      },
+    ],
+  });
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("Anthropic non ha restituito testo");
+  const parsed = ActivityDraftSchema.safeParse(extractJson<unknown>(textBlock.text));
+  if (!parsed.success) throw new Error("La bozza dell'AI non e' nel formato atteso. Riprova.");
+  return parsed.data;
+}

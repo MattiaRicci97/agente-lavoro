@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, jsonb, date, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, jsonb, date, primaryKey, unique } from "drizzle-orm/pg-core";
 import { classesTable } from "./classes";
 import { studentsTable } from "./students";
 import { teachersTable } from "./teachers";
@@ -109,3 +109,27 @@ export type RecoverySet = typeof recoverySetsTable.$inferSelect;
 export type RecoveryQuestion = typeof recoveryQuestionsTable.$inferSelect;
 export type RecoveryItem = typeof recoveryItemsTable.$inferSelect;
 export type StudentNotice = typeof studentNoticesTable.$inferSelect;
+
+/**
+ * Bozza di un'attivita' breve da fare in classe per riprendere un obiettivo.
+ * L'assistente scrive la prima stesura (ai_draft), il docente la fa sua (body):
+ * resta uno strumento del docente, agli studenti non arriva nulla da qui.
+ */
+export const recoveryActivitiesTable = pgTable(
+  "recovery_activities",
+  {
+    id: serial("id").primaryKey(),
+    classId: integer("class_id")
+      .notNull()
+      .references(() => classesTable.id, { onDelete: "cascade" }),
+    objectiveId: integer("objective_id")
+      .notNull()
+      .references(() => learningObjectivesTable.id, { onDelete: "cascade" }),
+    aiDraft: text("ai_draft").notNull().default(""),
+    body: text("body").notNull().default(""),
+    updatedByTeacherId: integer("updated_by_teacher_id").references(() => teachersTable.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("recovery_activities_unique").on(t.classId, t.objectiveId)],
+);
+export type RecoveryActivity = typeof recoveryActivitiesTable.$inferSelect;

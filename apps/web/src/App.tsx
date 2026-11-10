@@ -16,6 +16,7 @@ import JoinClass from "./pages/JoinClass";
 import CattedraDashboard from "./pages/CattedraDashboard";
 import CattedraObiettivi from "./pages/CattedraObiettivi";
 import CattedraRecupero from "./pages/CattedraRecupero";
+import CattedraMappa from "./pages/CattedraMappa";
 import CattedraClassi from "./pages/CattedraClassi";
 import CattedraProfilo from "./pages/CattedraProfilo";
 import CattedraAssistente from "./pages/CattedraAssistente";
@@ -222,6 +223,11 @@ function Router() {
       <Route path="/cattedra/scrutinio">
         <TeacherGate>
           <CattedraScrutinio />
+        </TeacherGate>
+      </Route>
+      <Route path="/cattedra/mappa">
+        <TeacherGate>
+          <CattedraMappa />
         </TeacherGate>
       </Route>
       <Route path="/cattedra/recupero">
