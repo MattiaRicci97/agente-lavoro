@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { MasteryList } from "@/components/MasteryList";
+import type { MasteryRow } from "@/lib/mastery";
 import { customFetch } from "@sillabo/api-client-react";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -105,6 +107,11 @@ export default function CattedraStudente() {
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
 
+  const { data: masteryData } = useQuery({
+    queryKey: ["studentMastery", studentId],
+    enabled: Number.isInteger(studentId),
+    queryFn: () => customFetch<{ mastery: MasteryRow[] }>(`/api/students/${studentId}/mastery`, { responseType: "json" }),
+  });
   const queryKey = ["studentRegistro", studentId];
   const { data, isLoading } = useQuery({
     queryKey,
@@ -190,6 +197,8 @@ export default function CattedraStudente() {
         </div>
 
         <Andamento entries={entries} />
+
+        <MasteryList rows={masteryData?.mastery ?? []} audience="docente" />
 
         <Card>
           <CardHeader className="pb-3">

@@ -24,6 +24,7 @@ import registroRouter from "./registro";
 import invitesRouter from "./invites";
 import scrutiniRouter from "./scrutini";
 import objectivesRouter from "./objectives";
+import recoveryRouter from "./recovery";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use(registroRouter);
 router.use(invitesRouter);
 router.use(scrutiniRouter);
 router.use(objectivesRouter);
+router.use(recoveryRouter);
 
 export default router;

@@ -21,6 +21,25 @@ import {
   type DiagnosisDecision,
 } from "../lib/diagnosis";
 import { DIAGNOSIS_OUTCOMES, DIAGNOSIS_ERROR_TYPES } from "../lib/ai";
+import { syncSignedEvidence } from "../lib/mastery";
+import { attachToRecoveryDraft } from "../lib/recovery";
+
+/**
+ * Dopo la firma: la diagnosi entra nel profilo di padronanza e, se ha lasciato
+ * obiettivi da riprendere, nella bozza di recupero della classe. Sono
+ * conseguenze della firma, non condizioni: se falliscono, la firma resta.
+ */
+async function afterSignature(
+  log: { error: (obj: unknown, msg: string) => void },
+  input: { classId: number | null; sourceKind: "scritto" | "foto"; sourceId: number; examId: number | null; title: string },
+): Promise<void> {
+  try {
+    await syncSignedEvidence(input.sourceKind, input.sourceId);
+    await attachToRecoveryDraft(input);
+  } catch (err) {
+    log.error({ err, ...input }, "Profilo o recupero non aggiornati dopo la firma");
+  }
+}
 
 const router: IRouter = Router();
 
@@ -273,6 +292,19 @@ router.post("/written-submissions/:id/validate", requireTeacher, async (req, res
     .where(eq(writtenExamSubmissionsTable.id, id))
     .returning();
 
+  const [exam] = await db
+    .select({ examType: writtenExamsTable.examType, title: materialsTable.title })
+    .from(writtenExamsTable)
+    .innerJoin(materialsTable, eq(materialsTable.id, writtenExamsTable.materialId))
+    .where(eq(writtenExamsTable.id, updated.examId));
+  await afterSignature(req.log, {
+    classId: updated.classId,
+    sourceKind: "scritto",
+    sourceId: id,
+    examId: updated.examId,
+    title: exam ? `${exam.title} (${exam.examType})` : "Compito scritto",
+  });
+
   res.json(updated);
 });
 
@@ -315,6 +347,14 @@ router.post("/photo-corrections/:id/validate", requireTeacher, async (req, res):
     })
     .where(eq(photoCorrectionsTable.id, id))
     .returning();
+
+  await afterSignature(req.log, {
+    classId: updated.classId,
+    sourceKind: "foto",
+    sourceId: id,
+    examId: null,
+    title: `Compiti fotografati di ${updated.subject}`,
+  });
 
   res.json(updated);
 });

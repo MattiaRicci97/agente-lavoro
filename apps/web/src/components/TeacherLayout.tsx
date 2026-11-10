@@ -14,6 +14,7 @@ import {
   ClipboardList,
   Gavel,
   Target,
+  LifeBuoy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -105,6 +106,7 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
             active={location === "/cattedra/validazioni"}
             badge={toValidateCount}
           />
+          <NavItem href="/cattedra/recupero" icon={LifeBuoy} label="Recupero" active={location === "/cattedra/recupero"} />
           <NavItem href="/cattedra/assistente" icon={Sparkles} label="Assistente" active={location === "/cattedra/assistente"} />
 
           <div className="px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">

@@ -59,6 +59,13 @@ const APP_TABLES = [
   "institution_objective_overrides",
   "material_objectives",
   "diagnosis_items",
+  "mastery_events",
+  "mastery_states",
+  "recovery_sets",
+  "recovery_set_sources",
+  "recovery_questions",
+  "recovery_items",
+  "student_notices",
 ];
 
 const MODULE_CATALOG: Array<{
@@ -391,6 +398,13 @@ async function main() {
       ["diagnosis_items_source_idx", "diagnosis_items (source_kind, source_id)"],
       ["diagnosis_items_student_idx", "diagnosis_items (student_id, status)"],
       ["diagnosis_items_class_idx", "diagnosis_items (class_id, objective_id)"],
+      ["mastery_events_pair_idx", "mastery_events (student_id, objective_id)"],
+      ["mastery_events_source_idx", "mastery_events (source_kind, source_id)"],
+      ["recovery_sets_class_idx", "recovery_sets (class_id, status)"],
+      ["recovery_questions_set_idx", "recovery_questions (recovery_set_id)"],
+      ["recovery_items_student_idx", "recovery_items (student_id, status, due_date)"],
+      ["recovery_items_set_idx", "recovery_items (recovery_set_id)"],
+      ["student_notices_student_idx", "student_notices (student_id, read_at)"],
     ];
     for (const [name, target] of INDEXES) {
       await client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${target}`);

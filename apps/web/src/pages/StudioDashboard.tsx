@@ -1,3 +1,5 @@
+import { StudentNotices } from "@/components/StudentNotices";
+import { MyMastery } from "@/components/MyMastery";
 import { useListMaterials, useGetMe } from "@sillabo/api-client-react";
 import { StudentLayout } from "@/components/StudentLayout";
 import { timeGreeting, firstName } from "@/lib/greeting";
@@ -26,6 +28,9 @@ export default function StudioDashboard() {
             Cosa studiamo oggi? Scegli un argomento e mettiti alla prova con quiz e simulazioni.
           </p>
         </div>
+
+        <StudentNotices />
+        <MyMastery />
 
         <Link href="/studio/foto">
           <div className="group hover-elevate flex cursor-pointer items-center gap-4 rounded-2xl border border-secondary/20 bg-gradient-to-r from-secondary/10 to-secondary/5 p-5">

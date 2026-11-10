@@ -12,6 +12,8 @@ export * from "./classPosts";
 export * from "./materials";
 export * from "./learningObjectives";
 export * from "./diagnosisItems";
+export * from "./mastery";
+export * from "./recovery";
 export * from "./questions";
 export * from "./quizAttempts";
 export * from "./oralSessions";

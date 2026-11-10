@@ -679,3 +679,73 @@ export async function draftGiudizio(input: {
   }
   return extractJson<GiudizioResult>(textBlock.text);
 }
+
+export interface RecoveryQuestionDraft {
+  objectiveCode: string;
+  question: string;
+  answer: string;
+}
+
+export const RecoveryQuestionsSchema = z.object({
+  questions: z
+    .array(
+      z.object({
+        objectiveCode: z.string().trim().min(1).max(40),
+        question: z.string().trim().min(5).max(600),
+        answer: z.string().trim().min(1).max(1200),
+      }),
+    )
+    .max(60),
+});
+
+/** Tiene solo le domande ben formate e riferite a un obiettivo richiesto. */
+export function parseRecoveryQuestions(raw: unknown, codes: string[]): RecoveryQuestionDraft[] {
+  const parsed = RecoveryQuestionsSchema.safeParse(raw);
+  if (!parsed.success) throw new Error("Le domande proposte dall'AI non sono nel formato atteso. Riprova.");
+  const allowed = new Set(codes);
+  return parsed.data.questions.filter((q) => allowed.has(q.objectiveCode));
+}
+
+/**
+ * Bozza delle domande di richiamo per un set di recupero: poche, brevi, una
+ * sola idea per domanda, risolvibili in un paio di minuti. Al modello vanno
+ * solo gli obiettivi e i tipi di errore piu' frequenti nella classe: nessun
+ * nome, nessun elaborato. Il docente rilegge e approva.
+ */
+export async function generateRecoveryQuestions(input: {
+  subject: string;
+  gradeLevel: string;
+  perObjective: number;
+  objectives: Array<{ code: string; title: string; description: string; commonError: string | null }>;
+}): Promise<RecoveryQuestionDraft[]> {
+  const list = input.objectives
+    .map(
+      (o) =>
+        `- ${o.code}: ${o.title}. ${o.description}` +
+        (o.commonError ? ` (errore piu' frequente nella classe: ${o.commonError})` : ""),
+    )
+    .join("\n");
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 4096,
+    system:
+      "Sei un docente italiano di scuola superiore che prepara richiami brevi per il recupero dopo una verifica. " +
+      "Ogni domanda allena UN solo obiettivo, si risolve in uno o due minuti, e ha una risposta di riferimento chiara con il passaggio chiave. " +
+      "Varia le domande dello stesso obiettivo: non ripetere gli stessi numeri. Rispondi SOLO con JSON valido.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Materia: ${input.subject}\nClasse: ${input.gradeLevel}\n\nObiettivi da riprendere:\n${list}\n\n` +
+          `Scrivi ${input.perObjective} domande per ciascun obiettivo. ` +
+          `Rispondi con JSON: {"questions": [{"objectiveCode": "...", "question": "...", "answer": "..."}]}`,
+      },
+    ],
+  });
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("Anthropic non ha restituito testo");
+  return parseRecoveryQuestions(
+    extractJson<unknown>(textBlock.text),
+    input.objectives.map((o) => o.code),
+  );
+}

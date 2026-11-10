@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { customFetch } from "@sillabo/api-client-react";
+import { RecoveryLampo, type RecoveryDue } from "@/components/RecoveryLampo";
 import {
   useListMaterials,
   listReviewItems,
@@ -73,6 +75,20 @@ export default function StudioLampo() {
   const [knownCount, setKnownCount] = useState(0);
   const [finished, setFinished] = useState(false);
 
+  // I richiami del recupero approvato dal docente vengono prima di tutto il resto.
+  const [recoveryDone, setRecoveryDone] = useState(false);
+  const { data: recovery, isLoading: recoveryLoading } = useQuery({
+    queryKey: ["myRecovery"],
+    queryFn: () =>
+      customFetch<{ due: RecoveryDue[]; nextDueDate: string | null }>("/api/me/recovery", { responseType: "json" }),
+  });
+  // La sessione si fissa sui richiami trovati all'apertura: quando i dati si
+  // aggiornano a meta' (o alla fine) la schermata non deve sparire.
+  const [recoveryCards, setRecoveryCards] = useState<RecoveryDue[] | null>(null);
+  useEffect(() => {
+    if (recoveryCards === null && recovery && recovery.due.length > 0) setRecoveryCards(recovery.due);
+  }, [recovery, recoveryCards]);
+
   const isLoading =
     materialsLoading || reviewQueries.some((q) => q.isLoading) || questionQueries.some((q) => q.isLoading);
 
@@ -96,7 +112,15 @@ export default function StudioLampo() {
     else setIndex(index + 1);
   }
 
-  if (isLoading) {
+  if (recoveryCards && !recoveryDone) {
+    return (
+      <StudentLayout>
+        <RecoveryLampo due={recoveryCards} onDone={() => setRecoveryDone(true)} />
+      </StudentLayout>
+    );
+  }
+
+  if (isLoading || recoveryLoading) {
     return (
       <StudentLayout>
         <div className="max-w-xl mx-auto mt-10">
@@ -112,7 +136,11 @@ export default function StudioLampo() {
         <div className="max-w-xl mx-auto mt-16 text-center p-12 border rounded-lg bg-card border-dashed">
           <Zap className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
           <h3 className="text-lg font-medium">Niente da ripassare al volo</h3>
-          <p className="text-muted-foreground mb-4">Il tuo piano di ripasso e' vuoto: svolgi un quiz per alimentarlo.</p>
+          <p className="text-muted-foreground mb-4">
+            {recovery?.nextDueDate
+              ? `Il prossimo richiamo del tuo docente arriva il ${new Date(`${recovery.nextDueDate}T00:00:00`).toLocaleDateString("it-IT", { day: "numeric", month: "long" })}.`
+              : "Il tuo piano di ripasso e' vuoto: svolgi un quiz per alimentarlo."}
+          </p>
           <Button asChild variant="outline">
             <Link href="/studio/ripasso">Vai al piano di ripasso</Link>
           </Button>

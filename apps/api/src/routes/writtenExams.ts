@@ -14,6 +14,7 @@ import { generateWrittenExamPrompt, gradeWrittenExam } from "../lib/ai";
 import { requireAuth, requireTeacher, findApprovedStudentForMaterial } from "../middlewares/auth";
 import { teacherCanManageMaterial } from "../lib/materialAccess";
 import { announceToClasses } from "../lib/classFeed";
+import { dropEvidenceForSources } from "../lib/mastery";
 import {
   candidateObjectivesForStudentWork,
   toCandidates,
@@ -262,6 +263,7 @@ router.delete("/written-exams/:id", requireTeacher, async (req, res): Promise<vo
     .from(writtenExamSubmissionsTable)
     .where(eq(writtenExamSubmissionsTable.examId, id));
   await deleteDiagnosisForSources("scritto", submissions.map((s) => s.id));
+  await dropEvidenceForSources("scritto", submissions.map((s) => s.id));
   await db.delete(writtenExamsTable).where(eq(writtenExamsTable.id, id));
   res.status(204).end();
 });

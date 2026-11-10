@@ -13,7 +13,8 @@ import {
 import { gradeQuizAnswer } from "../lib/ai";
 import { requireAuth, findApprovedStudentForMaterial } from "../middlewares/auth";
 import { teacherCanManageMaterial } from "../lib/materialAccess";
-import { teachersTable } from "@sillabo/db";
+import { teachersTable, materialObjectivesTable } from "@sillabo/db";
+import { recordEvidence } from "../lib/mastery";
 
 const router: IRouter = Router();
 
@@ -242,6 +243,33 @@ router.post("/materials/:id/quiz-attempts", requireAuth, async (req, res): Promi
       durationSeconds,
     })
     .returning();
+
+  // Pratica: aggiorna il profilo di padronanza, non crea voti. L'obiettivo e'
+  // quello della domanda o, se il materiale ne copre uno solo, quello.
+  try {
+    const linked = await db
+      .select({ objectiveId: materialObjectivesTable.objectiveId })
+      .from(materialObjectivesTable)
+      .where(eq(materialObjectivesTable.materialId, material.id));
+    const fallback = linked.length === 1 ? linked[0].objectiveId : null;
+    await recordEvidence(
+      gradedAnswers.flatMap((a) => {
+        const objectiveId = questionsById.get(a.questionId)?.objectiveId ?? fallback;
+        return objectiveId
+          ? [{
+              studentId: student.id,
+              objectiveId,
+              source: "pratica" as const,
+              outcome: a.correct ? ("corretto" as const) : ("errato" as const),
+              sourceKind: "quiz",
+              sourceId: attempt.id,
+            }]
+          : [];
+      }),
+    );
+  } catch (err) {
+    req.log.error({ err }, "Profilo di padronanza non aggiornato dopo il quiz");
+  }
 
   const missedTopics = Array.from(
     new Set(gradedAnswers.filter((a) => !a.correct && a.topic).map((a) => a.topic)),
