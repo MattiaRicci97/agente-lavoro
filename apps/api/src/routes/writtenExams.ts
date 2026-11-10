@@ -14,6 +14,13 @@ import { generateWrittenExamPrompt, gradeWrittenExam } from "../lib/ai";
 import { requireAuth, requireTeacher, findApprovedStudentForMaterial } from "../middlewares/auth";
 import { teacherCanManageMaterial } from "../lib/materialAccess";
 import { announceToClasses } from "../lib/classFeed";
+import {
+  candidateObjectivesForStudentWork,
+  toCandidates,
+  storeDiagnosis,
+  diagnosisForSources,
+  deleteDiagnosisForSources,
+} from "../lib/diagnosis";
 
 const router: IRouter = Router();
 
@@ -125,6 +132,12 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
       ),
     );
   const mineByExam = new Map(mine.map((s) => [s.examId, s]));
+  // La diagnosi segue il voto: prima della firma non c'e'.
+  const diagnosis = await diagnosisForSources(
+    "scritto",
+    mine.filter((s) => s.validationStatus === "validata").map((s) => s.id),
+    { onlyValidated: true },
+  );
 
   res.json(
     exams.map((e) => {
@@ -139,6 +152,13 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
               // Prima del visto lo studente non riceve nessun voto.
               grade: sub.validationStatus === "validata" ? sub.teacherGrade : null,
               feedback: sub.validationStatus === "validata" ? sub.teacherFeedback : null,
+              diagnosis: (diagnosis.get(sub.id) ?? []).map((d) => ({
+                exercise: d.exercise,
+                objective: d.teacher?.objective ?? null,
+                outcome: d.teacher?.outcome ?? d.ai.outcome,
+                errorType: d.teacher?.errorType ?? null,
+                evidence: d.ai.evidence,
+              })),
               createdAt: sub.createdAt,
             }
           : null,
@@ -235,6 +255,13 @@ router.delete("/written-exams/:id", requireTeacher, async (req, res): Promise<vo
     return;
   }
 
+  // Le diagnosi non hanno una chiave esterna verso le consegne (la sorgente e'
+  // polimorfica): vanno tolte a mano prima che la cascata cancelli le consegne.
+  const submissions = await db
+    .select({ id: writtenExamSubmissionsTable.id })
+    .from(writtenExamSubmissionsTable)
+    .where(eq(writtenExamSubmissionsTable.examId, id));
+  await deleteDiagnosisForSources("scritto", submissions.map((s) => s.id));
   await db.delete(writtenExamsTable).where(eq(writtenExamsTable.id, id));
   res.status(204).end();
 });
@@ -292,11 +319,18 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
 
   req.log.info({ examId }, "Grading written exam submission");
 
-  const { grade, feedback } = await gradeWrittenExam(
+  const candidates = await candidateObjectivesForStudentWork({
+    classId: student.classId,
+    subject: material.subject,
+    gradeLevel: material.gradeLevel,
+    materialId: material.id,
+  });
+  const { grade, feedback, diagnosis } = await gradeWrittenExam(
     exam.examType,
     exam.prompt,
     material.subject,
     parsed.data.studentAnswer,
+    toCandidates(candidates),
   );
 
   const [created] = await db
@@ -311,6 +345,21 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
       aiFeedback: feedback ?? "",
     })
     .returning();
+
+  // La diagnosi e' un di piu' rispetto al voto: se manca, la consegna vale lo stesso.
+  try {
+    const stored = await storeDiagnosis({
+      sourceKind: "scritto",
+      sourceId: created.id,
+      authUserId: req.authUserId!,
+      classId: student.classId,
+      items: diagnosis,
+      candidates,
+    });
+    if (!stored) req.log.warn({ submissionId: created.id }, "Nessuna diagnosi valida dal modello");
+  } catch (err) {
+    req.log.error({ err, submissionId: created.id }, "Diagnosi non salvata");
+  }
 
   res.status(201).json({
     id: created.id,

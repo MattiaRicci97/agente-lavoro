@@ -5,6 +5,12 @@ import { db, studentsTable, photoCorrectionsTable } from "@sillabo/db";
 import { requireAuth } from "../middlewares/auth";
 import { downloadObject } from "../lib/storage";
 import { correctPhotoHomework, type ImageMediaType } from "../lib/ai";
+import {
+  candidateObjectivesForStudentWork,
+  toCandidates,
+  storeDiagnosis,
+  diagnosisForSources,
+} from "../lib/diagnosis";
 
 const router: IRouter = Router();
 
@@ -64,6 +70,13 @@ router.post("/photo-corrections", requireAuth, async (req, res): Promise<void> =
     return;
   }
 
+  const candidates = await candidateObjectivesForStudentWork({
+    classId: membership?.classId ?? null,
+    subject,
+    gradeLevel,
+    materialId: materialId ?? null,
+  });
+
   let result;
   try {
     result = await correctPhotoHomework(
@@ -72,6 +85,7 @@ router.post("/photo-corrections", requireAuth, async (req, res): Promise<void> =
       subject,
       gradeLevel,
       assignmentPrompt ?? null,
+      toCandidates(candidates),
     );
   } catch (err) {
     req.log.error({ err }, "Correzione foto fallita");
@@ -98,6 +112,20 @@ router.post("/photo-corrections", requireAuth, async (req, res): Promise<void> =
     })
     .returning();
 
+  try {
+    const stored = await storeDiagnosis({
+      sourceKind: "foto",
+      sourceId: row.id,
+      authUserId: req.authUserId!,
+      classId: membership?.classId ?? null,
+      items: result.diagnosis,
+      candidates,
+    });
+    if (!stored) req.log.warn({ photoCorrectionId: row.id }, "Nessuna diagnosi valida dal modello");
+  } catch (err) {
+    req.log.error({ err, photoCorrectionId: row.id }, "Diagnosi non salvata");
+  }
+
   res.status(201).json(row);
 });
 
@@ -109,7 +137,23 @@ router.get("/photo-corrections/mine", requireAuth, async (req, res): Promise<voi
     .where(eq(photoCorrectionsTable.authUserId, req.authUserId!))
     .orderBy(desc(photoCorrectionsTable.createdAt))
     .limit(30);
-  res.json(rows);
+  const diagnosis = await diagnosisForSources(
+    "foto",
+    rows.filter((r) => r.validationStatus === "validata").map((r) => r.id),
+    { onlyValidated: true },
+  );
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      diagnosis: (diagnosis.get(r.id) ?? []).map((d) => ({
+        exercise: d.exercise,
+        objective: d.teacher?.objective ?? null,
+        outcome: d.teacher?.outcome ?? d.ai.outcome,
+        errorType: d.teacher?.errorType ?? null,
+        evidence: d.ai.evidence,
+      })),
+    })),
+  );
 });
 
 export default router;

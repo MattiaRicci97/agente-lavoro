@@ -1,3 +1,5 @@
+import { DiagnosisSummary } from "@/components/DiagnosisSummary";
+import type { StudentDiagnosisRow } from "@/lib/diagnosis";
 import { useState, useRef } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -38,6 +40,7 @@ interface PhotoCorrection {
   validationStatus?: "da_validare" | "validata";
   teacherGrade?: number | null;
   teacherFeedback?: string | null;
+  diagnosis?: StudentDiagnosisRow[];
 }
 
 function gradeColor(grade: number | null): string {
@@ -196,6 +199,8 @@ export default function StudioFoto() {
                   <p className="leading-relaxed whitespace-pre-wrap">{result.teacherFeedback}</p>
                 </div>
               )}
+
+              {isValidated && <DiagnosisSummary rows={result.diagnosis ?? []} />}
 
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">

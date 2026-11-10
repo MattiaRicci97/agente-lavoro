@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, ScanLine, Mic, Sparkles, Stamp, PartyPopper, PenLine } from "lucide-react";
+import { DiagnosisEditor } from "@/components/DiagnosisEditor";
+import type { DiagnosisRow, DiagnosisDecision, ObjectiveRef } from "@/lib/diagnosis";
 
 interface PendingPhoto {
   id: number;
@@ -26,6 +28,8 @@ interface PendingPhoto {
   strengths: string[];
   improvements: string[];
   createdAt: string;
+  diagnosis: DiagnosisRow[];
+  objectiveOptions: ObjectiveRef[];
 }
 
 interface PendingOral {
@@ -50,6 +54,8 @@ interface PendingWritten {
   materialTitle: string;
   subject: string;
   createdAt: string;
+  diagnosis: DiagnosisRow[];
+  objectiveOptions: ObjectiveRef[];
 }
 
 interface PendingResponse {
@@ -63,17 +69,26 @@ interface PendingResponse {
 function SignBox({
   proposedGrade,
   proposedFeedback,
+  diagnosis,
+  objectiveOptions,
   onSign,
   isPending,
 }: {
   proposedGrade: number | null;
   proposedFeedback: string;
-  onSign: (grade: number | null, feedback: string) => void;
+  /** Se assente, la correzione non ha una diagnosi (es. interrogazioni). */
+  diagnosis?: DiagnosisRow[];
+  objectiveOptions?: ObjectiveRef[];
+  onSign: (grade: number | null, feedback: string, decisions: DiagnosisDecision[]) => void;
   isPending: boolean;
 }) {
   const [grade, setGrade] = useState<string>(proposedGrade !== null ? String(proposedGrade) : "");
   const [feedback, setFeedback] = useState<string>(proposedFeedback);
-  const touched = grade !== (proposedGrade !== null ? String(proposedGrade) : "") || feedback !== proposedFeedback;
+  const [decisions, setDecisions] = useState<DiagnosisDecision[]>([]);
+  const touched =
+    grade !== (proposedGrade !== null ? String(proposedGrade) : "") ||
+    feedback !== proposedFeedback ||
+    decisions.length > 0;
 
   return (
     <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-3">
@@ -82,6 +97,10 @@ function SignBox({
         La tua valutazione
         {touched && <Badge variant="outline" className="ml-auto text-[10px]">modificata</Badge>}
       </div>
+
+      {diagnosis && (
+        <DiagnosisEditor rows={diagnosis} options={objectiveOptions ?? []} onChange={setDecisions} />
+      )}
 
       <div className="flex gap-3">
         <div className="w-24 space-y-1.5">
@@ -110,7 +129,7 @@ function SignBox({
           Puoi confermare così com'è o correggere: allo studente arriva la <strong>tua</strong> versione.
         </p>
         <Button
-          onClick={() => onSign(grade.trim() === "" ? null : Number(grade), feedback)}
+          onClick={() => onSign(grade.trim() === "" ? null : Number(grade), feedback, decisions)}
           disabled={isPending}
           className="shrink-0"
         >
@@ -137,11 +156,13 @@ export default function CattedraValidazioni() {
       id,
       grade,
       feedback,
+      diagnosis,
     }: {
       kind: "photo" | "oral" | "written";
       id: number;
       grade: number | null;
       feedback: string;
+      diagnosis?: DiagnosisDecision[];
     }) => {
       const path =
         kind === "photo"
@@ -152,7 +173,7 @@ export default function CattedraValidazioni() {
       return customFetch(path, {
         method: "POST",
         responseType: "json",
-        body: JSON.stringify({ grade, feedback }),
+        body: JSON.stringify(kind === "oral" ? { grade, feedback } : { grade, feedback, diagnosis: diagnosis ?? [] }),
       });
     },
     onSuccess: () => {
@@ -237,8 +258,10 @@ export default function CattedraValidazioni() {
                   <SignBox
                     proposedGrade={p.grade}
                     proposedFeedback={p.feedback}
+                    diagnosis={p.diagnosis}
+                    objectiveOptions={p.objectiveOptions}
                     isPending={sign.isPending}
-                    onSign={(grade, feedback) => sign.mutate({ kind: "photo", id: p.id, grade, feedback })}
+                    onSign={(grade, feedback, diagnosis) => sign.mutate({ kind: "photo", id: p.id, grade, feedback, diagnosis })}
                   />
                 </CardContent>
               </Card>
@@ -281,8 +304,10 @@ export default function CattedraValidazioni() {
                   <SignBox
                     proposedGrade={w.grade}
                     proposedFeedback={w.feedback}
+                    diagnosis={w.diagnosis}
+                    objectiveOptions={w.objectiveOptions}
                     isPending={sign.isPending}
-                    onSign={(grade, feedback) => sign.mutate({ kind: "written", id: w.id, grade, feedback })}
+                    onSign={(grade, feedback, diagnosis) => sign.mutate({ kind: "written", id: w.id, grade, feedback, diagnosis })}
                   />
                 </CardContent>
               </Card>

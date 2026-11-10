@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Response } from "express";
 import { eq, and, inArray, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
@@ -13,13 +13,63 @@ import {
 } from "@sillabo/db";
 import { requireTeacher } from "../middlewares/auth";
 import { teacherClassIds } from "../lib/classAccess";
+import {
+  diagnosisForSources,
+  validateDiagnosis,
+  candidateObjectivesForStudentWork,
+  DiagnosisError,
+  type DiagnosisDecision,
+} from "../lib/diagnosis";
+import { DIAGNOSIS_OUTCOMES, DIAGNOSIS_ERROR_TYPES } from "../lib/ai";
 
 const router: IRouter = Router();
+
+const DecisionSchema = z.object({
+  id: z.number().int().positive(),
+  objectiveId: z.number().int().positive().nullable().optional(),
+  outcome: z.enum(DIAGNOSIS_OUTCOMES).optional(),
+  errorType: z.enum(DIAGNOSIS_ERROR_TYPES).nullable().optional(),
+  discard: z.boolean().optional(),
+});
 
 const ValidateSchema = z.object({
   grade: z.number().int().min(1).max(10).nullable(),
   feedback: z.string().trim().max(4000).optional().default(""),
+  /** Correzioni alla diagnosi: le righe non citate vengono confermate come proposte. */
+  diagnosis: z.array(DecisionSchema).max(60).optional().default([]),
 });
+
+/**
+ * Gli obiettivi tra cui il docente puo' scegliere per correggere una diagnosi.
+ * Una lista per classe e materia, condivisa dalle correzioni della stessa coda.
+ */
+async function objectiveOptionsFor(
+  cache: Map<string, Array<{ id: number; code: string; title: string }>>,
+  input: { classId: number | null; subject: string; gradeLevel: string; materialId?: number | null },
+) {
+  const key = `${input.classId}|${input.subject}|${input.materialId ?? ""}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const list = (await candidateObjectivesForStudentWork(input)).map((o) => ({ id: o.id, code: o.code, title: o.title }));
+  cache.set(key, list);
+  return list;
+}
+
+async function applyDiagnosis(
+  res: Response,
+  input: { sourceKind: "scritto" | "foto"; sourceId: number; teacherId: number; decisions: DiagnosisDecision[] },
+): Promise<boolean> {
+  try {
+    await validateDiagnosis(input);
+    return true;
+  } catch (err) {
+    if (err instanceof DiagnosisError) {
+      res.status(400).json({ error: err.message });
+      return false;
+    }
+    throw err;
+  }
+}
 
 /**
  * Proposte di valutazione in attesa del visto del docente.
@@ -29,7 +79,7 @@ const ValidateSchema = z.object({
 router.get("/validations/pending", requireTeacher, async (req, res): Promise<void> => {
   const classIds = await teacherClassIds(req.teacher!.id);
   if (!classIds.length) {
-    res.json({ photoCorrections: [], oralSessions: [], total: 0 });
+    res.json({ photoCorrections: [], oralSessions: [], writtenSubmissions: [], total: 0 });
     return;
   }
 
@@ -39,6 +89,8 @@ router.get("/validations/pending", requireTeacher, async (req, res): Promise<voi
       studentName: photoCorrectionsTable.studentName,
       subject: photoCorrectionsTable.subject,
       gradeLevel: photoCorrectionsTable.gradeLevel,
+      classId: photoCorrectionsTable.classId,
+      materialId: photoCorrectionsTable.materialId,
       assignmentPrompt: photoCorrectionsTable.assignmentPrompt,
       imageObjectPath: photoCorrectionsTable.imageObjectPath,
       transcription: photoCorrectionsTable.transcription,
@@ -106,6 +158,9 @@ router.get("/validations/pending", requireTeacher, async (req, res): Promise<voi
           prompt: writtenExamsTable.prompt,
           materialTitle: materialsTable.title,
           subject: materialsTable.subject,
+          classId: writtenExamSubmissionsTable.classId,
+          materialId: materialsTable.id,
+          gradeLevel: materialsTable.gradeLevel,
         })
         .from(writtenExamSubmissionsTable)
         .innerJoin(writtenExamsTable, eq(writtenExamsTable.id, writtenExamSubmissionsTable.examId))
@@ -120,10 +175,43 @@ router.get("/validations/pending", requireTeacher, async (req, res): Promise<voi
         .limit(50)
     : [];
 
+  // La diagnosi proposta viaggia con la correzione, insieme agli obiettivi
+  // tra cui il docente puo' scegliere se vuole correggerla.
+  const photoDiagnosis = await diagnosisForSources("foto", photos.map((p) => p.id));
+  const writtenDiagnosis = await diagnosisForSources("scritto", writtenSubmissions.map((w) => w.id));
+  const options = new Map<string, Array<{ id: number; code: string; title: string }>>();
+
+  const photosOut = [];
+  for (const p of photos) {
+    photosOut.push({
+      ...p,
+      diagnosis: photoDiagnosis.get(p.id) ?? [],
+      objectiveOptions: await objectiveOptionsFor(options, {
+        classId: p.classId,
+        subject: p.subject,
+        gradeLevel: p.gradeLevel,
+        materialId: p.materialId,
+      }),
+    });
+  }
+  const writtenOut = [];
+  for (const w of writtenSubmissions) {
+    writtenOut.push({
+      ...w,
+      diagnosis: writtenDiagnosis.get(w.id) ?? [],
+      objectiveOptions: await objectiveOptionsFor(options, {
+        classId: w.classId,
+        subject: w.subject,
+        gradeLevel: w.gradeLevel,
+        materialId: w.materialId,
+      }),
+    });
+  }
+
   res.json({
-    photoCorrections: photos,
+    photoCorrections: photosOut,
     oralSessions: orals,
-    writtenSubmissions,
+    writtenSubmissions: writtenOut,
     total: photos.length + orals.length + writtenSubmissions.length,
   });
 });
@@ -169,6 +257,10 @@ router.post("/written-submissions/:id/validate", requireTeacher, async (req, res
     return;
   }
 
+  if (!(await applyDiagnosis(res, { sourceKind: "scritto", sourceId: id, teacherId: req.teacher!.id, decisions: parsed.data.diagnosis }))) {
+    return;
+  }
+
   const [updated] = await db
     .update(writtenExamSubmissionsTable)
     .set({
@@ -205,6 +297,10 @@ router.post("/photo-corrections/:id/validate", requireTeacher, async (req, res):
 
   if (!row || !row.classId || !classIds.includes(row.classId)) {
     res.status(404).json({ error: "Correzione non trovata" });
+    return;
+  }
+
+  if (!(await applyDiagnosis(res, { sourceKind: "foto", sourceId: id, teacherId: req.teacher!.id, decisions: parsed.data.diagnosis }))) {
     return;
   }
 

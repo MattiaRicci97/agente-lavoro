@@ -58,6 +58,7 @@ const APP_TABLES = [
   "learning_objective_prerequisites",
   "institution_objective_overrides",
   "material_objectives",
+  "diagnosis_items",
 ];
 
 const MODULE_CATALOG: Array<{
@@ -387,6 +388,9 @@ async function main() {
       ["institution_objective_overrides_institution_idx", "institution_objective_overrides (institution_id)"],
       ["material_objectives_objective_idx", "material_objectives (objective_id)"],
       ["questions_objective_idx", "questions (objective_id)"],
+      ["diagnosis_items_source_idx", "diagnosis_items (source_kind, source_id)"],
+      ["diagnosis_items_student_idx", "diagnosis_items (student_id, status)"],
+      ["diagnosis_items_class_idx", "diagnosis_items (class_id, objective_id)"],
     ];
     for (const [name, target] of INDEXES) {
       await client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${target}`);

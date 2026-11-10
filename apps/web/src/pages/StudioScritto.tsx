@@ -1,3 +1,5 @@
+import { DiagnosisSummary } from "@/components/DiagnosisSummary";
+import type { StudentDiagnosisRow } from "@/lib/diagnosis";
 import { useState } from "react";
 import { useParams, Link } from "wouter";
 import { useGetMaterial, getGetMaterialQueryKey, customFetch } from "@sillabo/api-client-react";
@@ -23,6 +25,7 @@ interface MySubmission {
   status: "da_validare" | "validata";
   grade: number | null;
   feedback: string | null;
+  diagnosis?: StudentDiagnosisRow[];
   createdAt: string;
 }
 
@@ -86,6 +89,7 @@ function SubmissionOutcome({ submission }: { submission: MySubmission }) {
           </CardContent>
         </Card>
       )}
+      <DiagnosisSummary rows={submission.diagnosis ?? []} />
     </div>
   );
 }

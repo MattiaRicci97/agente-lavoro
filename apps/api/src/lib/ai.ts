@@ -260,22 +260,96 @@ export async function generateWrittenExamPrompt(
   return { prompt: textBlock.text.trim() };
 }
 
+/**
+ * Diagnosi per esercizio: oltre al voto, il modello dice su quale obiettivo
+ * della mappa lo studente ha lavorato e come e' andata.
+ *
+ * L'elenco degli obiettivi e' chiuso: il modello sceglie tra i candidati
+ * ricevuti o lascia null. Un codice inventato diventa "non classificato", non
+ * un obiettivo nuovo. Quello che esce da qui e' una proposta: il docente la
+ * conferma o la corregge insieme al voto.
+ */
+export const DIAGNOSIS_OUTCOMES = ["corretto", "parziale", "errato"] as const;
+export const DIAGNOSIS_ERROR_TYPES = ["concettuale", "procedurale", "distrazione", "non_classificato"] as const;
+
+export const DiagnosisItemSchema = z.object({
+  exercise: z.string().trim().min(1).max(80),
+  objectiveCode: z.string().trim().max(40).nullable().default(null),
+  outcome: z.enum(DIAGNOSIS_OUTCOMES),
+  errorType: z.enum(DIAGNOSIS_ERROR_TYPES).nullable().default(null),
+  evidence: z.string().trim().max(400).default(""),
+});
+export const DiagnosisSchema = z.array(DiagnosisItemSchema).max(30);
+
+export interface DiagnosedExercise {
+  exercise: string;
+  objectiveCode: string | null;
+  outcome: (typeof DIAGNOSIS_OUTCOMES)[number];
+  errorType: (typeof DIAGNOSIS_ERROR_TYPES)[number] | null;
+  evidence: string;
+}
+
+/**
+ * Valida la diagnosi proposta. Se la lista non e' nel formato atteso restituisce
+ * una lista vuota: il voto resta valido, la diagnosi semplicemente manca (e il
+ * chiamante lo registra). Le righe vengono normalizzate:
+ *  - codice sconosciuto -> obiettivo null;
+ *  - esercizio errato o parziale senza obiettivo -> "non_classificato";
+ *  - esercizio corretto -> nessun tipo di errore.
+ */
+export function parseDiagnosis(raw: unknown, candidates: ObjectiveCandidate[]): DiagnosedExercise[] {
+  const parsed = DiagnosisSchema.safeParse(raw);
+  if (!parsed.success) return [];
+  const allowed = new Set(candidates.map((c) => c.code));
+  return parsed.data.map((row) => {
+    const objectiveCode = row.objectiveCode && allowed.has(row.objectiveCode) ? row.objectiveCode : null;
+    const wrong = row.outcome !== "corretto";
+    let errorType = wrong ? row.errorType : null;
+    if (wrong && (errorType === null || objectiveCode === null)) {
+      errorType = errorType ?? "non_classificato";
+    }
+    return { exercise: row.exercise, objectiveCode, outcome: row.outcome, errorType, evidence: row.evidence };
+  });
+}
+
+function diagnosisInstructions(candidates: ObjectiveCandidate[]): string {
+  const list = candidates.length
+    ? `Obiettivi di apprendimento disponibili (usa SOLO questi codici, oppure null se nessuno calza):\n` +
+      candidates.map((c) => `- ${c.code}: ${c.title}`).join("\n")
+    : "Nessun obiettivo disponibile: lascia objectiveCode a null.";
+  return (
+    `\n\nOltre al voto, prepara una diagnosi esercizio per esercizio (o passaggio per passaggio, se l'elaborato e' unico). ` +
+    `Per ciascuno indica: "exercise" (etichetta breve, es. "Es. 2"), "objectiveCode" (dalla lista o null), ` +
+    `"outcome" (corretto | parziale | errato), "errorType" (solo se non corretto: concettuale = non ha capito il concetto; ` +
+    `procedurale = ha capito ma sbaglia il procedimento; distrazione = errore di calcolo o svista; altrimenti null), ` +
+    `"evidence" (una frase breve presa dalla risposta dello studente che mostra l'errore o la riuscita, senza giudizi sulla persona).\n${list}`
+  );
+}
+
 export interface WrittenExamGradeResult {
   grade: number;
   feedback: string;
+  /** Vuota se il modello non ha prodotto una diagnosi valida. */
+  diagnosis: DiagnosedExercise[];
 }
+
+export const WrittenExamGradeSchema = z.object({
+  grade: z.number().min(1).max(10),
+  feedback: z.string().trim().min(1).max(6000),
+});
 
 export async function gradeWrittenExam(
   examType: string,
   prompt: string,
   subject: string,
   studentAnswer: string,
+  candidates: ObjectiveCandidate[] = [],
 ): Promise<WrittenExamGradeResult> {
   const label = EXAM_TYPE_LABELS[examType] ?? examType;
 
   const message = await getAnthropic().messages.create({
     model: MODEL,
-    max_tokens: 2048,
+    max_tokens: 3072,
     system:
       "Sei un docente italiano che corregge verifiche scritte nel formato reale delle scuole superiori. " +
       `Il formato e': ${label}. ` +
@@ -284,8 +358,9 @@ export async function gradeWrittenExam(
       {
         role: "user",
         content:
-          `Materia: ${subject}\nTraccia:\n${prompt}\n\nElaborato dello studente:\n${studentAnswer}\n\n` +
-          `Rispondi con JSON: {"grade": numero_da_1_a_10, "feedback": "..."}`,
+          `Materia: ${subject}\nTraccia:\n${prompt}\n\nElaborato dello studente:\n${studentAnswer}` +
+          diagnosisInstructions(candidates) +
+          `\n\nRispondi con JSON: {"grade": numero_da_1_a_10, "feedback": "...", "diagnosis": [{"exercise": "...", "objectiveCode": "..."|null, "outcome": "corretto|parziale|errato", "errorType": "concettuale|procedurale|distrazione"|null, "evidence": "..."}]}`,
       },
     ],
   });
@@ -295,7 +370,12 @@ export async function gradeWrittenExam(
     throw new Error("Anthropic non ha restituito testo");
   }
 
-  return extractJson<WrittenExamGradeResult>(textBlock.text);
+  const raw = extractJson<Record<string, unknown>>(textBlock.text);
+  const graded = WrittenExamGradeSchema.safeParse(raw);
+  if (!graded.success) {
+    throw new Error("La correzione dell'AI non e' nel formato atteso. Riprova.");
+  }
+  return { ...graded.data, diagnosis: parseDiagnosis(raw.diagnosis, candidates) };
 }
 
 export interface OralTurnResult {
@@ -416,20 +496,27 @@ export interface PhotoCorrectionResult {
   feedback: string;
   strengths: string[];
   improvements: string[];
+  /** Vuota se il modello non ha prodotto una diagnosi valida. */
+  diagnosis: DiagnosedExercise[];
 }
+
+export const PhotoCorrectionSchema = z.object({
+  transcription: z.string().default(""),
+  grade: z.number().min(1).max(10).nullable().default(null),
+  feedback: z.string().trim().default(""),
+  strengths: z.array(z.string()).default([]),
+  improvements: z.array(z.string()).default([]),
+});
 
 export type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
-/**
- * Corregge un compito scritto a mano fotografato usando la visione di Claude:
- * legge la grafia, valuta, assegna un voto e dà feedback costruttivo.
- */
 export async function correctPhotoHomework(
   imageBase64: string,
   mediaType: ImageMediaType,
   subject: string,
   gradeLevel: string,
   assignmentPrompt: string | null,
+  candidates: ObjectiveCandidate[] = [],
 ): Promise<PhotoCorrectionResult> {
   const consegna = assignmentPrompt?.trim()
     ? `La consegna del compito era: "${assignmentPrompt.trim()}".`
@@ -437,7 +524,7 @@ export async function correctPhotoHomework(
 
   const message = await getAnthropic().messages.create({
     model: MODEL,
-    max_tokens: 2048,
+    max_tokens: 3072,
     system:
       "Sei un docente italiano che corregge il compito scritto a mano di uno studente, fotografato e inviato come immagine. " +
       "Prima trascrivi fedelmente cio' che riesci a leggere nella foto (segnala con [illeggibile] le parti che non distingui). " +
@@ -455,8 +542,9 @@ export async function correctPhotoHomework(
           {
             type: "text",
             text:
-              `Materia: ${subject}\nLivello scolastico: ${gradeLevel || "non specificato"}\n${consegna}\n\n` +
-              `Correggi questo compito e rispondi con JSON: {"transcription": "cosa hai letto nella foto", "grade": numero_da_1_a_10_o_null, "feedback": "valutazione complessiva", "strengths": ["punto di forza", ...], "improvements": ["cosa migliorare", ...]}`,
+              `Materia: ${subject}\nLivello scolastico: ${gradeLevel || "non specificato"}\n${consegna}` +
+              diagnosisInstructions(candidates) +
+              `\n\nCorreggi questo compito e rispondi con JSON: {"transcription": "cosa hai letto nella foto", "grade": numero_da_1_a_10_o_null, "feedback": "valutazione complessiva", "strengths": ["punto di forza", ...], "improvements": ["cosa migliorare", ...], "diagnosis": [{"exercise": "...", "objectiveCode": "..."|null, "outcome": "corretto|parziale|errato", "errorType": "concettuale|procedurale|distrazione"|null, "evidence": "..."}]}`,
           },
         ],
       },
@@ -467,7 +555,12 @@ export async function correctPhotoHomework(
   if (!textBlock || textBlock.type !== "text") {
     throw new Error("Anthropic non ha restituito testo");
   }
-  return extractJson<PhotoCorrectionResult>(textBlock.text);
+  const raw = extractJson<Record<string, unknown>>(textBlock.text);
+  const parsed = PhotoCorrectionSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error("La correzione dell'AI non e' nel formato atteso. Riprova.");
+  }
+  return { ...parsed.data, diagnosis: parseDiagnosis(raw.diagnosis, candidates) };
 }
 
 export interface NoticeDraftResult {
