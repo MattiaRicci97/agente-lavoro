@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, desc, and } from "drizzle-orm";
-import { db, materialsTable, materialClassesTable, questionsTable } from "@sillabo/db";
+import { db, materialsTable, materialClassesTable, questionsTable, materialObjectivesTable } from "@sillabo/db";
 import {
   CreateMaterialBody,
   ListMaterialsResponse,
@@ -15,6 +15,7 @@ import { z } from "zod/v4";
 import { attachClassIds } from "../lib/materialClasses";
 import { materialVisibilityFilter, teacherCanManageMaterial } from "../lib/materialAccess";
 import { announceToClasses } from "../lib/classFeed";
+import { candidateObjectivesForMaterial } from "../lib/objectives";
 import {
   extractTextFromUploadedFile,
   UnsupportedFileTypeError,
@@ -167,12 +168,24 @@ router.post("/materials", requireTeacher, async (req, res): Promise<void> => {
 
   req.log.info({ materialId: material.id }, "Classifying curriculum topic");
   try {
-    const { topic, subtopic } = await classifyCurriculumTopic(
+    // Se l'istituto ha una mappa degli obiettivi per questa materia, l'assistente
+    // sceglie tra quelli; il collegamento resta una proposta ("ai") che il
+    // docente puo' correggere dalla pagina del materiale.
+    const candidates = await candidateObjectivesForMaterial(req.teacher!.id, material.subject, material.gradeLevel);
+    const { topic, subtopic, objectiveCodes } = await classifyCurriculumTopic(
       material.title,
       material.subject,
       material.gradeLevel,
       material.content,
+      candidates.map((c) => ({ code: c.code, title: c.title })),
     );
+    const chosen = candidates.filter((c) => objectiveCodes.includes(c.code));
+    if (chosen.length) {
+      await db
+        .insert(materialObjectivesTable)
+        .values(chosen.map((c) => ({ materialId: material.id, objectiveId: c.id, source: "ai" })))
+        .onConflictDoNothing();
+    }
     const [updated] = await db
       .update(materialsTable)
       .set({ curriculumTopic: topic, curriculumSubtopic: subtopic })

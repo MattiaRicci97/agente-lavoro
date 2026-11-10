@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod/v4";
 import { logger } from "./logger";
 
 // Client Anthropic creato solo al primo utilizzo: cosi' il server si avvia
@@ -17,7 +18,7 @@ function getAnthropic(): Anthropic {
 
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
 
-function extractJson<T>(text: string): T {
+export function extractJson<T>(text: string): T {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const raw = fenced ? fenced[1] : text;
   const start = raw.indexOf("{") === -1 ? raw.indexOf("[") : Math.min(...[raw.indexOf("{"), raw.indexOf("[")].filter((n) => n !== -1));
@@ -113,14 +114,40 @@ export async function gradeQuizAnswer(
 export interface CurriculumTagResult {
   topic: string;
   subtopic: string;
+  /** Codici degli obiettivi della mappa che il materiale copre (solo tra i candidati). */
+  objectiveCodes: string[];
 }
 
+export interface ObjectiveCandidate {
+  code: string;
+  title: string;
+}
+
+/** Forma attesa della risposta del modello: qualsiasi scostamento viene scartato. */
+export const CurriculumTagSchema = z.object({
+  topic: z.string().trim().min(1).max(200),
+  subtopic: z.string().trim().max(200).default(""),
+  objectiveCodes: z.array(z.string().trim().min(1).max(40)).max(8).default([]),
+});
+
+/**
+ * Collega un materiale al programma: macro-argomento, sotto-argomento e, se
+ * l'istituto ha una mappa degli obiettivi per quella materia, i codici degli
+ * obiettivi coperti. L'elenco dei candidati e' chiuso: il modello non puo'
+ * inventare un obiettivo, puo' solo scegliere tra quelli del dipartimento.
+ */
 export async function classifyCurriculumTopic(
   materialTitle: string,
   subject: string,
   gradeLevel: string,
   content: string,
+  candidates: ObjectiveCandidate[] = [],
 ): Promise<CurriculumTagResult> {
+  const candidateBlock = candidates.length
+    ? `\n\nObiettivi di apprendimento disponibili per questa materia (scegli SOLO tra questi, al massimo 5, i codici di quelli che il materiale copre davvero; lista vuota se nessuno):\n` +
+      candidates.map((c) => `- ${c.code}: ${c.title}`).join("\n")
+    : "";
+
   const message = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 512,
@@ -133,8 +160,8 @@ export async function classifyCurriculumTopic(
       {
         role: "user",
         content:
-          `Materia: ${subject}\nLivello scolastico: ${gradeLevel}\nTitolo materiale: ${materialTitle}\n\nContenuto:\n${content.slice(0, 4000)}\n\n` +
-          `Rispondi con JSON: {"topic": "macro-argomento del programma", "subtopic": "sotto-argomento specifico"}`,
+          `Materia: ${subject}\nLivello scolastico: ${gradeLevel}\nTitolo materiale: ${materialTitle}\n\nContenuto:\n${content.slice(0, 4000)}${candidateBlock}\n\n` +
+          `Rispondi con JSON: {"topic": "macro-argomento del programma", "subtopic": "sotto-argomento specifico", "objectiveCodes": ["codice", ...]}`,
       },
     ],
   });
@@ -144,7 +171,18 @@ export async function classifyCurriculumTopic(
     throw new Error("Anthropic non ha restituito testo");
   }
 
-  return extractJson<CurriculumTagResult>(textBlock.text);
+  return parseCurriculumTag(extractJson<unknown>(textBlock.text), candidates);
+}
+
+/** Valida la risposta e tiene solo i codici che esistono davvero tra i candidati. */
+export function parseCurriculumTag(raw: unknown, candidates: ObjectiveCandidate[]): CurriculumTagResult {
+  const parsed = CurriculumTagSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error("La classificazione dell'AI non e' nel formato atteso.");
+  }
+  const allowed = new Set(candidates.map((c) => c.code));
+  const objectiveCodes = Array.from(new Set(parsed.data.objectiveCodes.filter((c) => allowed.has(c)))).slice(0, 5);
+  return { topic: parsed.data.topic, subtopic: parsed.data.subtopic, objectiveCodes };
 }
 
 export async function generateSimplifiedContent(

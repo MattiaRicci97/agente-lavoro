@@ -10,6 +10,7 @@ export * from "./scrutini";
 export * from "./classJoinRequests";
 export * from "./classPosts";
 export * from "./materials";
+export * from "./learningObjectives";
 export * from "./questions";
 export * from "./quizAttempts";
 export * from "./oralSessions";

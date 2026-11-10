@@ -2,6 +2,7 @@ import { pgTable, serial, text, timestamp, integer, boolean } from "drizzle-orm/
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { materialsTable } from "./materials";
+import { learningObjectivesTable } from "./learningObjectives";
 
 /**
  * Domande di richiamo attivo su un materiale.
@@ -28,6 +29,8 @@ export const questionsTable = pgTable("questions", {
   authorType: text("author_type").notNull().default("ai"),
   /** true se il docente ne ha modificato il testo. */
   editedByTeacher: boolean("edited_by_teacher").notNull().default(false),
+  /** Obiettivo di apprendimento che la domanda allena (null = non ancora collegata). */
+  objectiveId: integer("objective_id").references(() => learningObjectivesTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

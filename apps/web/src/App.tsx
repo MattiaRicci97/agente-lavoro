@@ -14,6 +14,7 @@ import Onboarding from "./pages/Onboarding";
 import Invito, { PENDING_INVITE_KEY } from "./pages/Invito";
 import JoinClass from "./pages/JoinClass";
 import CattedraDashboard from "./pages/CattedraDashboard";
+import CattedraObiettivi from "./pages/CattedraObiettivi";
 import CattedraClassi from "./pages/CattedraClassi";
 import CattedraProfilo from "./pages/CattedraProfilo";
 import CattedraAssistente from "./pages/CattedraAssistente";
@@ -220,6 +221,11 @@ function Router() {
       <Route path="/cattedra/scrutinio">
         <TeacherGate>
           <CattedraScrutinio />
+        </TeacherGate>
+      </Route>
+      <Route path="/cattedra/obiettivi">
+        <TeacherGate>
+          <CattedraObiettivi />
         </TeacherGate>
       </Route>
       <Route path="/cattedra/registro">

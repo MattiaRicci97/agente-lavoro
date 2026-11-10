@@ -12,6 +12,8 @@ import {
 } from "@sillabo/api-zod";
 import { gradeQuizAnswer } from "../lib/ai";
 import { requireAuth, findApprovedStudentForMaterial } from "../middlewares/auth";
+import { teacherCanManageMaterial } from "../lib/materialAccess";
+import { teachersTable } from "@sillabo/db";
 
 const router: IRouter = Router();
 
@@ -22,10 +24,31 @@ router.get("/materials/:id/quiz-attempts", requireAuth, async (req, res): Promis
     return;
   }
 
+  // Il docente che gestisce il materiale vede tutti i tentativi; lo studente
+  // solo i propri. Chiunque altro non vede nulla.
+  const [teacher] = await db
+    .select({ id: teachersTable.id })
+    .from(teachersTable)
+    .where(eq(teachersTable.authUserId, req.authUserId!));
+  let scope;
+  if (teacher && (await teacherCanManageMaterial(teacher.id, params.data.id))) {
+    scope = eq(quizAttemptsTable.materialId, params.data.id);
+  } else {
+    const student = await findApprovedStudentForMaterial(req.authUserId!, params.data.id);
+    if (!student) {
+      res.status(404).json({ error: "Materiale non trovato" });
+      return;
+    }
+    scope = and(
+      eq(quizAttemptsTable.materialId, params.data.id),
+      eq(quizAttemptsTable.authUserId, req.authUserId!),
+    );
+  }
+
   const rows = await db
     .select()
     .from(quizAttemptsTable)
-    .where(eq(quizAttemptsTable.materialId, params.data.id))
+    .where(scope)
     .orderBy(desc(quizAttemptsTable.createdAt));
 
   res.json(ListQuizAttemptsResponse.parse(rows));

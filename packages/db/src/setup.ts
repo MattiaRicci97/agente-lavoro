@@ -7,12 +7,15 @@
  *     (l'app le raggiunge via connessione Postgres diretta, che non e' soggetta a RLS);
  *  2. crea il bucket privato "materials" su Supabase Storage, con policy che
  *     permettono upload e download ai soli utenti autenticati;
- *  3. carica il catalogo dei moduli della super-app (se non gia' presente).
+ *  3. carica il catalogo dei moduli della super-app (se non gia' presente);
+ *  4. carica il catalogo base degli obiettivi di apprendimento (bozze da
+ *     rivedere: il seed non tocca mai un obiettivo gia' confermato da un docente).
  */
 import { config } from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { OBJECTIVES_MATEMATICA_BIENNIO } from "./seed/objectivesMatematicaBiennio";
 
 // Carica il file .env dalla radice del repo (dove l'utente mette le chiavi).
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -51,6 +54,10 @@ const APP_TABLES = [
   "photo_corrections",
   "institution_members",
   "invites",
+  "learning_objectives",
+  "learning_objective_prerequisites",
+  "institution_objective_overrides",
+  "material_objectives",
 ];
 
 const MODULE_CATALOG: Array<{
@@ -375,6 +382,11 @@ async function main() {
       ["invites_institution_idx", "invites (institution_id)"],
       ["scrutini_class_idx", "scrutini (class_id)"],
       ["scrutinio_entries_scrutinio_idx", "scrutinio_entries (scrutinio_id)"],
+      ["learning_objectives_scope_idx", "learning_objectives (subject, grade_level)"],
+      ["learning_objectives_institution_idx", "learning_objectives (institution_id)"],
+      ["institution_objective_overrides_institution_idx", "institution_objective_overrides (institution_id)"],
+      ["material_objectives_objective_idx", "material_objectives (objective_id)"],
+      ["questions_objective_idx", "questions (objective_id)"],
     ];
     for (const [name, target] of INDEXES) {
       await client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${target}`);
@@ -476,6 +488,59 @@ async function main() {
       }
     }
     console.log(`✓ Modulo Ed. Finanziaria: ${FIN_ED_LESSONS.length} lezioni caricate`);
+
+    // 5. Catalogo base degli obiettivi di apprendimento (institution_id NULL).
+    //    Upsert per codice: il titolo e la descrizione vengono aggiornati solo
+    //    finche' l'obiettivo e' ancora una bozza. Quello che un docente ha
+    //    riletto e confermato resta com'e'.
+    let seededObjectives = 0;
+    for (const group of OBJECTIVES_MATEMATICA_BIENNIO) {
+      const idByCode = new Map<string, number>();
+      for (const [ord, o] of group.objectives.entries()) {
+        const { rows } = await client.query<{ id: number }>(
+          `INSERT INTO public.learning_objectives
+             (institution_id, subject, grade_level, code, title, description, review_status, active, ord)
+           VALUES (NULL, $1, $2, $3, $4, $5, 'bozza_da_rivedere', true, $6)
+           ON CONFLICT (subject, grade_level, code) WHERE institution_id IS NULL DO UPDATE
+             SET ord = EXCLUDED.ord,
+                 title = CASE WHEN learning_objectives.review_status = 'bozza_da_rivedere'
+                              THEN EXCLUDED.title ELSE learning_objectives.title END,
+                 description = CASE WHEN learning_objectives.review_status = 'bozza_da_rivedere'
+                                    THEN EXCLUDED.description ELSE learning_objectives.description END
+           RETURNING id`,
+          [group.subject, group.gradeLevel, o.code, o.title, o.description, ord],
+        );
+        idByCode.set(o.code, rows[0].id);
+        seededObjectives += 1;
+      }
+      // Le propedeuticita' del catalogo base si riallineano al seed (nessun dato
+      // utente vive su questa tabella per gli obiettivi base).
+      const ids = Array.from(idByCode.values());
+      await client.query(
+        `DELETE FROM public.learning_objective_prerequisites WHERE objective_id = ANY($1::int[])`,
+        [ids],
+      );
+      for (const o of group.objectives) {
+        for (const reqCode of o.requires ?? []) {
+          const objectiveId = idByCode.get(o.code)!;
+          // Il prerequisito puo' stare in un altro anno dello stesso catalogo.
+          const { rows } = await client.query<{ id: number }>(
+            `SELECT id FROM public.learning_objectives
+              WHERE institution_id IS NULL AND subject = $1 AND code = $2`,
+            [group.subject, reqCode],
+          );
+          if (!rows[0]) {
+            throw new Error(`Seed obiettivi: ${o.code} richiede ${reqCode}, che non esiste nel catalogo`);
+          }
+          await client.query(
+            `INSERT INTO public.learning_objective_prerequisites (objective_id, requires_objective_id)
+             VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [objectiveId, rows[0].id],
+          );
+        }
+      }
+    }
+    console.log(`\u2713 Obiettivi di apprendimento: ${seededObjectives} nel catalogo base (bozze da rivedere)`);
 
     console.log("\nSetup del database completato.");
   } finally {

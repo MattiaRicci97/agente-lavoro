@@ -182,11 +182,11 @@ export default function CattedraNuovo() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="1^ Superiore">1ª Superiore</SelectItem>
-                          <SelectItem value="2^ Superiore">2ª Superiore</SelectItem>
-                          <SelectItem value="3^ Superiore">3ª Superiore</SelectItem>
-                          <SelectItem value="4^ Superiore">4ª Superiore</SelectItem>
-                          <SelectItem value="5^ Superiore">5ª Superiore</SelectItem>
+                          <SelectItem value="1ª Superiore">1ª Superiore</SelectItem>
+                          <SelectItem value="2ª Superiore">2ª Superiore</SelectItem>
+                          <SelectItem value="3ª Superiore">3ª Superiore</SelectItem>
+                          <SelectItem value="4ª Superiore">4ª Superiore</SelectItem>
+                          <SelectItem value="5ª Superiore">5ª Superiore</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

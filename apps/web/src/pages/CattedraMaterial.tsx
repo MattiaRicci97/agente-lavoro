@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
+import { MaterialObjectives } from "@/components/MaterialObjectives";
 
 const examTypeLabels: Record<string, string> = {
   tema: "Tema",
@@ -239,6 +240,7 @@ export default function CattedraMaterial() {
               <h1 className="text-3xl font-bold tracking-tight">{material.title}</h1>
               <p className="text-muted-foreground mt-1">{material.subject} • {material.gradeLevel}</p>
               <CurriculumBadge topic={material.curriculumTopic} subtopic={material.curriculumSubtopic} />
+              <MaterialObjectives materialId={material.id} subject={material.subject} />
             </div>
             {!material.questionCount && (
               <Button onClick={handleGenerateQuestions} disabled={generateQuestions.isPending}>
