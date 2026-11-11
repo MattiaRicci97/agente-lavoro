@@ -48,6 +48,8 @@ export async function candidateObjectivesForStudentWork(input: {
   subject: string;
   gradeLevel: string;
   materialId?: number | null;
+  /** Obiettivi da mettere in testa (es. quelli di una verifica di riscontro). */
+  priorityObjectiveIds?: number[];
 }): Promise<EffectiveObjective[]> {
   if (input.classId === null) return [];
   const [cls] = await db
@@ -63,6 +65,13 @@ export async function candidateObjectivesForStudentWork(input: {
   const grades = new Set([normalizeGradeLevel(cls.gradeLevel), normalizeGradeLevel(input.gradeLevel)]);
   const sameGrade = sameSubject.filter((o) => grades.has(normalizeGradeLevel(o.gradeLevel)));
   const pool = sameGrade.length ? sameGrade : sameSubject;
+
+  if (input.priorityObjectiveIds?.length) {
+    const wanted = new Set(input.priorityObjectiveIds);
+    const byId = new Map(all.map((o) => [o.id, o]));
+    const first = input.priorityObjectiveIds.map((id) => byId.get(id)).filter((o): o is EffectiveObjective => !!o);
+    return [...first, ...pool.filter((o) => !wanted.has(o.id))];
+  }
 
   // Gli obiettivi dichiarati sul materiale vanno in testa: sono quelli che il
   // docente si aspetta di vedere in questa verifica.

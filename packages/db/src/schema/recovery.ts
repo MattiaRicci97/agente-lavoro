@@ -35,6 +35,10 @@ export const recoverySetsTable = pgTable("recovery_sets", {
     onDelete: "set null",
   }),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
+  /** Bozza della verifica di riscontro (proposta dell'assistente, testo del docente). */
+  followupDraft: text("followup_draft"),
+  /** La verifica di riscontro assegnata, che chiude il ciclo. */
+  followupExamId: integer("followup_exam_id").references(() => writtenExamsTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

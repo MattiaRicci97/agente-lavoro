@@ -127,6 +127,8 @@ export interface RecoverySetDetail {
   }>;
   studentsCount: number;
   progress: { done: number; total: number } | null;
+  /** La verifica di riscontro: possibile solo se il set nasce da un compito assegnato. */
+  followup: { possible: boolean; draft: string | null; examId: number | null };
 }
 
 /** Chi deve riprendere cosa, secondo le diagnosi agganciate al set. */
@@ -196,6 +198,7 @@ export async function recoverySetDetail(set: RecoverySet): Promise<RecoverySetDe
     }),
     studentsCount: new Set(gaps.map((g) => g.studentId)).size,
     progress,
+    followup: { possible: set.examId !== null, draft: set.followupDraft, examId: set.followupExamId },
   };
 }
 
@@ -287,4 +290,22 @@ export async function approveAndDistribute(set: RecoverySet, teacherId: number, 
 /** Lo studente (riga di classe) dietro un utente, o null. */
 export async function studentRowsFor(authUserId: string) {
   return db.select().from(studentsTable).where(eq(studentsTable.authUserId, authUserId));
+}
+
+/** Gli studenti che hanno ricevuto i richiami di un set (e quindi il riscontro). */
+export async function recoveryRecipientIds(setId: number): Promise<number[]> {
+  const rows = await db
+    .selectDistinct({ studentId: recoveryItemsTable.studentId })
+    .from(recoveryItemsTable)
+    .where(eq(recoveryItemsTable.recoverySetId, setId));
+  return rows.map((r) => r.studentId);
+}
+
+/** Gli obiettivi effettivamente distribuiti con un set. */
+export async function recoveryObjectiveIds(setId: number): Promise<number[]> {
+  const rows = await db
+    .selectDistinct({ objectiveId: recoveryItemsTable.objectiveId })
+    .from(recoveryItemsTable)
+    .where(eq(recoveryItemsTable.recoverySetId, setId));
+  return rows.map((r) => r.objectiveId);
 }

@@ -792,3 +792,38 @@ export async function draftRecoveryActivity(input: {
   if (!parsed.success) throw new Error("La bozza dell'AI non e' nel formato atteso. Riprova.");
   return parsed.data;
 }
+
+export const FollowupExamSchema = z.object({ prompt: z.string().trim().min(20).max(6000) });
+
+/**
+ * Bozza della verifica di riscontro: breve, un esercizio per obiettivo, sugli
+ * stessi obiettivi del recupero ma con dati diversi. Il docente la rilegge
+ * prima di assegnarla. Al modello vanno solo gli obiettivi.
+ */
+export async function generateFollowupExam(input: {
+  subject: string;
+  gradeLevel: string;
+  objectives: Array<{ code: string; title: string; description: string }>;
+}): Promise<string> {
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 2048,
+    system:
+      "Sei un docente italiano di scuola superiore. Prepari una verifica breve (15-20 minuti) per controllare se un recupero ha funzionato. " +
+      "Un esercizio numerato per ciascun obiettivo, di difficolta' media, con consegne chiare. Non includere le soluzioni. Rispondi SOLO con JSON valido.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Materia: ${input.subject}\nClasse: ${input.gradeLevel}\n\nObiettivi da verificare:\n` +
+          input.objectives.map((o) => `- ${o.code}: ${o.title}. ${o.description}`).join("\n") +
+          `\n\nRispondi con JSON: {"prompt": "testo completo della verifica, con gli esercizi numerati"}`,
+      },
+    ],
+  });
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("Anthropic non ha restituito testo");
+  const parsed = FollowupExamSchema.safeParse(extractJson<unknown>(textBlock.text));
+  if (!parsed.success) throw new Error("La verifica proposta dall'AI non e' nel formato atteso. Riprova.");
+  return parsed.data.prompt;
+}

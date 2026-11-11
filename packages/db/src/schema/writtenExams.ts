@@ -28,6 +28,11 @@ export const writtenExamsTable = pgTable("written_exams", {
   dueDate: text("due_date"),
   /** Nota del docente alla classe, mostrata insieme alla traccia. */
   instructions: text("instructions"),
+  /**
+   * Valorizzato solo per una verifica di riscontro: il set di recupero che
+   * chiude. La vedono solo gli studenti che hanno ricevuto quel recupero.
+   */
+  recoverySetId: integer("recovery_set_id"),
   studentName: text("student_name"),
   studentAnswer: text("student_answer"),
   grade: integer("grade"),

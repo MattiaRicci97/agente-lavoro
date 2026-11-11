@@ -10,13 +10,22 @@ import {
   recoveryQuestionsTable,
   recoveryItemsTable,
   studentNoticesTable,
+  writtenExamsTable,
   type RecoverySet,
 } from "@sillabo/db";
 import { requireAuth, requireTeacher } from "../middlewares/auth";
 import { teacherClassIds, isClassTeacher } from "../lib/classAccess";
-import { recoverySetDetail, approveAndDistribute, RecoveryError, studentRowsFor } from "../lib/recovery";
+import {
+  recoverySetDetail,
+  approveAndDistribute,
+  RecoveryError,
+  studentRowsFor,
+  recoveryRecipientIds,
+  recoveryObjectiveIds,
+} from "../lib/recovery";
 import { recordEvidence, masteryForStudents } from "../lib/mastery";
-import { generateRecoveryQuestions } from "../lib/ai";
+import { generateRecoveryQuestions, generateFollowupExam } from "../lib/ai";
+import { metricsForSet } from "../lib/metrics";
 import { ERROR_TYPE_FOR_PROMPT } from "../lib/recoveryPrompt";
 
 const router: IRouter = Router();
@@ -61,7 +70,11 @@ router.get("/recovery-sets", requireTeacher, async (req, res): Promise<void> => 
     const detail = await recoverySetDetail(set);
     // Una bozza senza piu' lacune (diagnosi ritirate) non ha nulla da proporre.
     if (set.status === "bozza" && !detail.objectives.length) continue;
-    out.push({ ...detail, className: className.get(set.classId) ?? "" });
+    out.push({
+      ...detail,
+      className: className.get(set.classId) ?? "",
+      metrics: set.status === "approvato" ? await metricsForSet(set) : null,
+    });
   }
   res.json({ sets: out });
 });
@@ -234,6 +247,106 @@ router.post("/recovery-sets/:id/approve", requireTeacher, async (req, res): Prom
     }
     throw err;
   }
+});
+
+// --- Verifica di riscontro -------------------------------------------------
+
+/** L'assistente propone la verifica breve che chiude il ciclo: resta una bozza. */
+router.post("/recovery-sets/:id/followup-draft", requireTeacher, async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  const set = id ? await setForTeacher(req.teacher!.id, id) : null;
+  if (!set) {
+    res.status(404).json({ error: "Recupero non trovato" });
+    return;
+  }
+  if (set.status !== "approvato" || set.examId === null || set.followupExamId !== null) {
+    res.status(409).json({ error: "La verifica di riscontro si prepara dopo l'approvazione del recupero, una volta sola" });
+    return;
+  }
+  const objectiveIds = await recoveryObjectiveIds(set.id);
+  const objectives = objectiveIds.length
+    ? await db.select().from(learningObjectivesTable).where(inArray(learningObjectivesTable.id, objectiveIds))
+    : [];
+  const [cls] = await db.select().from(classesTable).where(eq(classesTable.id, set.classId));
+  if (!objectives.length) {
+    res.status(409).json({ error: "Questo recupero non ha obiettivi distribuiti" });
+    return;
+  }
+  try {
+    const prompt = await generateFollowupExam({
+      subject: objectives[0].subject,
+      gradeLevel: cls?.gradeLevel ?? "",
+      objectives: objectives.map((o) => ({ code: o.code, title: o.title, description: o.description })),
+    });
+    await db.update(recoverySetsTable).set({ followupDraft: prompt }).where(eq(recoverySetsTable.id, set.id));
+    res.json({ draft: prompt });
+  } catch (err) {
+    req.log.error({ err }, "Bozza verifica di riscontro fallita");
+    res.status(502).json({ error: "L'assistente non e' riuscito a preparare la verifica. Riprova, o scrivila tu." });
+  }
+});
+
+const FollowupBody = z.object({
+  prompt: z.string().trim().min(20).max(6000),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+});
+
+/**
+ * Il docente assegna la verifica di riscontro (col testo che ha rivisto) ai
+ * soli studenti che hanno fatto il recupero. Si corregge e si firma come ogni
+ * altro compito: e' quella firma a dire se l'obiettivo e' stato recuperato.
+ */
+router.post("/recovery-sets/:id/followup", requireTeacher, async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  const set = id ? await setForTeacher(req.teacher!.id, id) : null;
+  if (!set) {
+    res.status(404).json({ error: "Recupero non trovato" });
+    return;
+  }
+  const parsed = FollowupBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (set.status !== "approvato" || set.followupExamId !== null) {
+    res.status(409).json({ error: "La verifica di riscontro e' gia' stata assegnata, o il recupero non e' approvato" });
+    return;
+  }
+  const [original] = set.examId !== null ? await db.select().from(writtenExamsTable).where(eq(writtenExamsTable.id, set.examId)) : [];
+  if (!original) {
+    res.status(409).json({ error: "Il compito da cui nasce questo recupero non esiste piu'" });
+    return;
+  }
+  const [exam] = await db
+    .insert(writtenExamsTable)
+    .values({
+      materialId: original.materialId,
+      examType: original.examType,
+      prompt: parsed.data.prompt,
+      assignedByTeacherId: req.teacher!.id,
+      dueDate: parsed.data.dueDate ?? null,
+      instructions: "Verifica di riscontro dopo il ripasso mirato.",
+      recoverySetId: set.id,
+    })
+    .returning();
+  await db
+    .update(recoverySetsTable)
+    .set({ followupExamId: exam.id, followupDraft: parsed.data.prompt })
+    .where(eq(recoverySetsTable.id, set.id));
+
+  const recipients = await recoveryRecipientIds(set.id);
+  if (recipients.length) {
+    await db.insert(studentNoticesTable).values(
+      recipients.map((studentId) => ({
+        studentId,
+        kind: "riscontro",
+        title: "Una breve verifica di riscontro",
+        body: "Il tuo docente ha assegnato una verifica breve sugli argomenti del ripasso mirato: serve a vedere cosa si e' consolidato.",
+        link: `/studio/material/${original.materialId}/scritto`,
+      })),
+    );
+  }
+  res.status(201).json({ examId: exam.id, recipients: recipients.length });
 });
 
 /** Il docente decide che questo recupero non serve (solo finche' e' una bozza). */

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { LifeBuoy, Sparkles, Loader2, CheckCircle2, Pencil, Trash2, Plus, Users, X, CalendarClock } from "lucide-react";
+import { LifeBuoy, Sparkles, Loader2, CheckCircle2, Pencil, Trash2, Plus, Users, X, CalendarClock, ClipboardCheck } from "lucide-react";
 import { ERROR_TYPE_LABEL, type DiagnosisErrorType } from "@/lib/diagnosis";
 
 interface Question {
@@ -39,6 +39,103 @@ interface RecoverySet {
   objectives: SetObjective[];
   studentsCount: number;
   progress: { done: number; total: number } | null;
+  followup: { possible: boolean; draft: string | null; examId: number | null };
+  metrics: {
+    gaps: number;
+    gapsAssessed: number;
+    gapsRecovered: number;
+    recoveredPercent: number | null;
+    gradeDelta: number | null;
+    participationPercent: number | null;
+  } | null;
+}
+
+/** La verifica breve che chiude il ciclo: bozza dell'assistente, testo e firma del docente. */
+function Followup({ set }: { set: RecoverySet }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [prompt, setPrompt] = useState(set.followup.draft ?? "");
+  const [dueDate, setDueDate] = useState("");
+  const onError = (err: any) =>
+    toast({ title: "Operazione non riuscita", description: err?.data?.error ?? "Riprova.", variant: "destructive" });
+
+  const draft = useMutation({
+    mutationFn: () =>
+      customFetch<{ draft: string }>(`/api/recovery-sets/${set.id}/followup-draft`, { method: "POST", responseType: "json" }),
+    onSuccess: (data) => setPrompt(data.draft),
+    onError,
+  });
+  const assign = useMutation({
+    mutationFn: () =>
+      customFetch(`/api/recovery-sets/${set.id}/followup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt.trim(), dueDate: dueDate || null }),
+        responseType: "json",
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["recoverySets"] });
+      toast({ title: "Verifica di riscontro assegnata", description: "La vedono solo gli studenti di questo recupero." });
+    },
+    onError,
+  });
+
+  if (set.followup.examId !== null) {
+    const m = set.metrics;
+    return (
+      <div className="rounded-xl border bg-muted/30 p-4 space-y-2">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <ClipboardCheck className="h-4 w-4 text-primary" /> Verifica di riscontro assegnata
+        </div>
+        {m && m.gapsAssessed > 0 ? (
+          <p className="text-sm">
+            <strong>{m.gapsRecovered} su {m.gapsAssessed}</strong> obiettivi verificati risultano recuperati
+            {m.recoveredPercent !== null && ` (${m.recoveredPercent}%)`}
+            {m.gradeDelta !== null && `; voto medio ${m.gradeDelta >= 0 ? "+" : ""}${String(m.gradeDelta).replace(".", ",")} rispetto alla prima verifica`}.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Quando gli studenti consegnano, la correggi e la firmi in "Da validare": e' quella firma a dire cosa e' stato recuperato.
+          </p>
+        )}
+      </div>
+    );
+  }
+  if (!set.followup.possible) return null;
+
+  return (
+    <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-medium text-primary">
+          <ClipboardCheck className="h-4 w-4" /> Verifica di riscontro
+        </div>
+        <Button size="sm" variant="outline" className="bg-card" onClick={() => draft.mutate()} disabled={draft.isPending}>
+          {draft.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+          {prompt ? "Chiedi un'altra bozza" : "Chiedi una bozza all'assistente"}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Una prova breve sugli stessi obiettivi, dopo i richiami. La ricevono solo gli studenti di questo recupero; la
+        correggi e la firmi come ogni altro compito.
+      </p>
+      <Textarea
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        rows={prompt ? 6 : 3}
+        className="bg-card"
+        placeholder="Scrivi qui il testo della verifica, o chiedi una bozza e adattala."
+      />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium">Consegna entro (facoltativo)</label>
+          <Input type="date" className="w-44 bg-card" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        </div>
+        <Button onClick={() => assign.mutate()} disabled={assign.isPending || prompt.trim().length < 20}>
+          <CheckCircle2 className="mr-2 h-4 w-4" /> Assegna la verifica
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function QuestionRow({
@@ -207,6 +304,8 @@ function SetCard({ set }: { set: RecoverySet }) {
           </div>
         )}
 
+        {!isDraft && <Followup set={set} />}
+
         {isDraft && missing > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/40 p-3 text-sm">
             <span>
@@ -330,7 +429,7 @@ export default function CattedraRecupero() {
             </CardContent>
           </Card>
         ) : (
-          sets.map((s) => <SetCard key={`${s.id}-${s.status}-${s.intervalsDays.join("-")}`} set={s} />)
+          sets.map((s) => <SetCard key={`${s.id}-${s.status}-${s.followup.examId ?? "x"}`} set={s} />)
         )}
       </div>
     </TeacherLayout>

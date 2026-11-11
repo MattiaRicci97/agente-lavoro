@@ -37,6 +37,7 @@ interface Assignment {
   dueDate: string | null;
   instructions: string | null;
   createdAt: string;
+  isFollowup?: boolean;
   mySubmission: MySubmission | null;
 }
 
@@ -186,7 +187,7 @@ export default function StudioScritto() {
                   <CardHeader className="pb-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="outline" className="uppercase text-[10px]">
-                        {examTypeLabels[a.examType] ?? a.examType}
+                        {a.isFollowup ? "Verifica di riscontro" : (examTypeLabels[a.examType] ?? a.examType)}
                       </Badge>
                       {a.dueDate && (
                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -220,7 +221,7 @@ export default function StudioScritto() {
               <CardHeader>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className="uppercase text-[10px]">
-                    {examTypeLabels[selected.examType] ?? selected.examType}
+                    {selected.isFollowup ? "Verifica di riscontro" : (examTypeLabels[selected.examType] ?? selected.examType)}
                   </Badge>
                   {selected.dueDate && (
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">

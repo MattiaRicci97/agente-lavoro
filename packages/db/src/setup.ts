@@ -406,6 +406,7 @@ async function main() {
       ["recovery_items_student_idx", "recovery_items (student_id, status, due_date)"],
       ["recovery_items_set_idx", "recovery_items (recovery_set_id)"],
       ["student_notices_student_idx", "student_notices (student_id, read_at)"],
+      ["written_exams_recovery_set_idx", "written_exams (recovery_set_id)"],
     ];
     for (const [name, target] of INDEXES) {
       await client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${target}`);

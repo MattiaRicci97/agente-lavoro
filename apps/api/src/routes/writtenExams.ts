@@ -15,6 +15,7 @@ import { requireAuth, requireTeacher, findApprovedStudentForMaterial } from "../
 import { teacherCanManageMaterial } from "../lib/materialAccess";
 import { announceToClasses } from "../lib/classFeed";
 import { dropEvidenceForSources } from "../lib/mastery";
+import { recoveryRecipientIds, recoveryObjectiveIds } from "../lib/recovery";
 import {
   candidateObjectivesForStudentWork,
   toCandidates,
@@ -123,6 +124,14 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
     return;
   }
 
+  // Una verifica di riscontro riguarda solo chi ha fatto quel recupero.
+  const visibleExams = [];
+  for (const e of exams) {
+    if (e.recoverySetId === null || (await recoveryRecipientIds(e.recoverySetId)).includes(student.id)) {
+      visibleExams.push(e);
+    }
+  }
+
   const mine = await db
     .select()
     .from(writtenExamSubmissionsTable)
@@ -141,10 +150,11 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
   );
 
   res.json(
-    exams.map((e) => {
+    visibleExams.map((e) => {
       const sub = mineByExam.get(e.id);
       return {
         ...assignmentView(e),
+        isFollowup: e.recoverySetId !== null,
         mySubmission: sub
           ? {
               id: sub.id,
@@ -304,6 +314,11 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
     return;
   }
 
+  if (exam.recoverySetId !== null && !(await recoveryRecipientIds(exam.recoverySetId)).includes(student.id)) {
+    res.status(404).json({ error: "Compito non trovato" });
+    return;
+  }
+
   // Una consegna per studente: il compito non si rifà.
   const [existing] = await db
     .select({ id: writtenExamSubmissionsTable.id })
@@ -326,6 +341,7 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
     subject: material.subject,
     gradeLevel: material.gradeLevel,
     materialId: material.id,
+    priorityObjectiveIds: exam.recoverySetId !== null ? await recoveryObjectiveIds(exam.recoverySetId) : undefined,
   });
   const { grade, feedback, diagnosis } = await gradeWrittenExam(
     exam.examType,

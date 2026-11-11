@@ -23,15 +23,16 @@ export interface Evidence {
   source: MasterySource;
   outcome: MasteryOutcome;
   at: Date;
+  /** La prova da cui viene l'evidenza (es. "scritto:12"): piu' esercizi, una prova. */
+  ref: string;
 }
 
-/** Quante evidenze firmate recenti devono essere corrette per dire "acquisito". */
-export const SIGNED_WINDOW = 2;
-
 /**
- * - acquisito: le ultime evidenze FIRMATE (fino a SIGNED_WINDOW) sono tutte corrette;
- * - fragile: c'e' evidenza firmata non tutta corretta, ma da qualche parte lo
- *   studente ha mostrato di saperci fare almeno in parte (anche in pratica);
+ * - acquisito: nell'ULTIMA prova firmata tutti gli esercizi su questo obiettivo
+ *   sono corretti. Una verifica di riscontro riuscita chiude quindi il ciclo,
+ *   anche dopo un errore precedente;
+ * - fragile: l'ultima prova firmata non e' tutta corretta, ma da qualche parte
+ *   lo studente ha mostrato di saperci fare almeno in parte (anche in pratica);
  * - mancante: evidenza firmata, e nessuna riuscita nemmeno parziale;
  * - null: solo pratica, nessun docente ha ancora verificato l'obiettivo.
  *
@@ -42,7 +43,8 @@ export function computeMasteryState(events: Evidence[]): MasteryState | null {
     .filter((e) => e.source === "firmato")
     .sort((a, b) => b.at.getTime() - a.at.getTime() || b.id - a.id);
   if (!signed.length) return null;
-  if (signed.slice(0, SIGNED_WINDOW).every((e) => e.outcome === "corretto")) return "acquisito";
+  const latest = signed.filter((e) => e.ref === signed[0].ref);
+  if (latest.every((e) => e.outcome === "corretto")) return "acquisito";
   return events.some((e) => e.outcome !== "errato") ? "fragile" : "mancante";
 }
 
@@ -77,7 +79,9 @@ export async function recomputeMastery(pairs: Pair[]): Promise<void> {
     const signed = events.filter((e) => e.source === "firmato");
     const practice = events.filter((e) => e.source !== "firmato");
     const values = {
-      state: computeMasteryState(events.map((e) => ({ id: e.id, source: e.source, outcome: e.outcome, at: e.createdAt }))),
+      state: computeMasteryState(
+        events.map((e) => ({ id: e.id, source: e.source, outcome: e.outcome, at: e.createdAt, ref: `${e.sourceKind}:${e.sourceId}` })),
+      ),
       signedCorrect: signed.filter((e) => e.outcome === "corretto").length,
       signedTotal: signed.length,
       practiceCorrect: practice.filter((e) => e.outcome === "corretto").length,

@@ -3,9 +3,10 @@ import { computeMasteryState, type Evidence } from "../../src/lib/mastery";
 import { parseRecoveryQuestions } from "../../src/lib/ai";
 
 let seq = 0;
-function ev(source: Evidence["source"], outcome: Evidence["outcome"], day: number): Evidence {
+/** Ogni giorno e' una prova diversa, salvo indicazione contraria. */
+function ev(source: Evidence["source"], outcome: Evidence["outcome"], day: number, ref = `prova:${day}`): Evidence {
   seq += 1;
-  return { id: seq, source, outcome, at: new Date(Date.UTC(2026, 0, day)) };
+  return { id: seq, source, outcome, at: new Date(Date.UTC(2026, 0, day)), ref };
 }
 
 describe("computeMasteryState", () => {
@@ -14,13 +15,13 @@ describe("computeMasteryState", () => {
     expect(computeMasteryState([ev("pratica", "corretto", 1), ev("autovalutazione", "corretto", 2)])).toBeNull();
   });
 
-  it("acquisito quando le ultime evidenze firmate sono corrette", () => {
+  it("acquisito quando l'ultima prova firmata e' tutta corretta: il riscontro chiude il ciclo", () => {
     expect(computeMasteryState([ev("firmato", "corretto", 1)])).toBe("acquisito");
-    expect(computeMasteryState([ev("firmato", "errato", 1), ev("firmato", "corretto", 2), ev("firmato", "corretto", 3)])).toBe("acquisito");
+    expect(computeMasteryState([ev("firmato", "errato", 1), ev("firmato", "corretto", 9)])).toBe("acquisito");
   });
 
-  it("una sola firma corretta dopo un errore non basta: resta fragile", () => {
-    expect(computeMasteryState([ev("firmato", "errato", 1), ev("firmato", "corretto", 2)])).toBe("fragile");
+  it("dentro la stessa prova un esercizio sbagliato basta a lasciare l'obiettivo fragile", () => {
+    expect(computeMasteryState([ev("firmato", "corretto", 2, "scritto:1"), ev("firmato", "errato", 2, "scritto:1")])).toBe("fragile");
     expect(computeMasteryState([ev("firmato", "corretto", 1), ev("firmato", "parziale", 2)])).toBe("fragile");
   });
 
