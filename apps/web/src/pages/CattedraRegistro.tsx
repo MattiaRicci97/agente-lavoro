@@ -1,3 +1,4 @@
+import { saveBlob } from "@/lib/download";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -51,14 +52,7 @@ export default function CattedraRegistro() {
       const blob = await customFetch<Blob>(`/api/classes/${activeClassId}/registro/export`, {
         responseType: "blob",
       });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `registro-${data?.class.name ?? "classe"}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      await saveBlob(blob, `registro-${data?.class.name ?? "classe"}.csv`);
     },
     onError: () =>
       toast({ title: "Esportazione non riuscita", description: "Riprova.", variant: "destructive" }),

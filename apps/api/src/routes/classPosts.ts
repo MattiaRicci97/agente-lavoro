@@ -1,3 +1,4 @@
+import { pushToClasses } from "../lib/push";
 import { Router, type IRouter } from "express";
 import { eq, and, inArray, desc, count, sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -248,6 +249,11 @@ router.post("/classes/:id/posts", requireTeacher, async (req, res): Promise<void
     )
     .returning();
 
+  await pushToClasses(targets, {
+    title: "Nuovo avviso in bacheca",
+    body: parsed.data.title.slice(0, 120),
+    link: "/studio/bacheca",
+  });
   res.status(201).json(created);
 });
 

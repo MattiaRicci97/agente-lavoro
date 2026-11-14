@@ -1,3 +1,4 @@
+import { NativeBridge } from "@/lib/nativeBridge";
 import { useEffect, useRef } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
@@ -391,6 +392,7 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClient}>
         <AuthQueryCacheInvalidator />
+        <NativeBridge />
         <TooltipProvider>
           <ErrorBoundary>
             <Router />

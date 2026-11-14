@@ -1,3 +1,4 @@
+import { saveBlob } from "@/lib/download";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch, useListInstitutions } from "@sillabo/api-client-react";
@@ -74,7 +75,7 @@ export default function CattedraEfficacia() {
       }),
   });
 
-  // Il download passa da una fetch autenticata, come per il registro.
+  // Il download passa da una fetch autenticata; nell'app si apre la condivisione.
   async function exportCsv() {
     setExporting(true);
     try {
@@ -82,12 +83,7 @@ export default function CattedraEfficacia() {
         `/api/institutions/${institutionId}/recovery-metrics/export${anonymize ? "?anonymize=1" : ""}`,
         { responseType: "blob" },
       );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `efficacia-recupero${anonymize ? "-anonimo" : ""}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await saveBlob(blob, `efficacia-recupero${anonymize ? "-anonimo" : ""}.csv`);
     } catch {
       toast({ title: "Esportazione non riuscita", description: "Riprova.", variant: "destructive" });
     } finally {

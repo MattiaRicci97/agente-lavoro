@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { setAuthTokenGetter } from "@sillabo/api-client-react";
 import { supabase } from "./supabase";
+import { unregisterDevice } from "./devices";
 
 export interface AuthUser {
   id: string;
@@ -84,6 +85,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: null, needsEmailConfirmation: !data.session };
       },
       signOut: async (options) => {
+        // Prima di perdere la sessione: altrimenti l'API non saprebbe chi sgancia il telefono.
+        await unregisterDevice();
         await supabase.auth.signOut();
         if (options?.redirectUrl) {
           window.location.assign(options.redirectUrl);

@@ -1,3 +1,4 @@
+import { publicOrigin } from "@/lib/native";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch, useListClasses } from "@sillabo/api-client-react";
@@ -32,7 +33,7 @@ interface PendingInvite {
 const NO_CLASS = "__nessuna__";
 
 function inviteLink(token: string) {
-  return `${window.location.origin}/invito/${token}`;
+  return `${publicOrigin()}/invito/${token}`;
 }
 
 /**

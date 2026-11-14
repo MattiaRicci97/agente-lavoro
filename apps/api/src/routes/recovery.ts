@@ -1,3 +1,4 @@
+import { pushToStudents } from "../lib/push";
 import { Router, type IRouter } from "express";
 import { eq, and, inArray, lte, gt, desc, asc, isNull, sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -346,6 +347,11 @@ router.post("/recovery-sets/:id/followup", requireTeacher, async (req, res): Pro
       })),
     );
   }
+  await pushToStudents(recipients, {
+    title: "Una breve verifica di riscontro",
+    body: "Il tuo docente ha assegnato una verifica sugli argomenti del ripasso.",
+    link: `/studio/material/${original.materialId}/scritto`,
+  });
   res.status(201).json({ examId: exam.id, recipients: recipients.length });
 });
 

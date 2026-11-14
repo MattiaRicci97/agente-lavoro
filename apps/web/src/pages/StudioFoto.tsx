@@ -1,3 +1,5 @@
+import { isNativeApp } from "@/lib/native";
+import { takeNativePhoto } from "@/lib/camera";
 import { DiagnosisSummary } from "@/components/DiagnosisSummary";
 import type { StudentDiagnosisRow } from "@/lib/diagnosis";
 import { useState, useRef } from "react";
@@ -72,7 +74,24 @@ export default function StudioFoto() {
 
   async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (file) await preparePhoto(file);
+  }
+
+  // Nell'app si usa la fotocamera del telefono; nel browser il selettore di file.
+  async function pickPhoto() {
+    if (!isNativeApp) {
+      fileInputRef.current?.click();
+      return;
+    }
+    try {
+      const file = await takeNativePhoto();
+      if (file) await preparePhoto(file);
+    } catch (err: any) {
+      toast({ title: "Fotocamera non disponibile", description: err?.message ?? "Controlla i permessi dell'app.", variant: "destructive" });
+    }
+  }
+
+  async function preparePhoto(file: File) {
     setPreparing(true);
     try {
       const jpeg = await downscaleToJpeg(file);
@@ -290,7 +309,7 @@ export default function StudioFoto() {
                   variant="outline"
                   size="sm"
                   className="mt-3 w-full"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={pickPhoto}
                   disabled={busy}
                 >
                   <RefreshCw className="mr-2 h-4 w-4" />
@@ -300,7 +319,7 @@ export default function StudioFoto() {
             ) : (
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={pickPhoto}
                 disabled={preparing}
                 className="hover-elevate flex w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-secondary/30 bg-secondary/5 py-12 text-secondary transition-colors"
               >

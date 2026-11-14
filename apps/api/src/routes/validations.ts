@@ -1,3 +1,4 @@
+import { pushToUsers } from "../lib/push";
 import { Router, type IRouter, type Response } from "express";
 import { eq, and, inArray, desc } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -34,6 +35,17 @@ async function afterSignature(
   input: { classId: number | null; sourceKind: "scritto" | "foto"; sourceId: number; examId: number | null; title: string },
 ): Promise<void> {
   try {
+    const [owner] = await db
+      .select({ authUserId: input.sourceKind === "scritto" ? writtenExamSubmissionsTable.authUserId : photoCorrectionsTable.authUserId })
+      .from(input.sourceKind === "scritto" ? writtenExamSubmissionsTable : photoCorrectionsTable)
+      .where(eq(input.sourceKind === "scritto" ? writtenExamSubmissionsTable.id : photoCorrectionsTable.id, input.sourceId));
+    if (owner?.authUserId) {
+      await pushToUsers([owner.authUserId], {
+        title: "Correzione firmata",
+        body: "Il tuo docente ha corretto il compito: trovi l'esito in Sillabo.",
+        link: input.sourceKind === "scritto" ? "/studio" : "/studio/foto",
+      });
+    }
     await syncSignedEvidence(input.sourceKind, input.sourceId);
     await attachToRecoveryDraft(input);
   } catch (err) {

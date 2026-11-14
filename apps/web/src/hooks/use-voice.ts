@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isNativeApp } from "@/lib/native";
 
 /**
- * Voce tramite le API del browser (Web Speech): riconoscimento vocale per
- * dettare le risposte e sintesi vocale per far parlare il Prof. AI.
- * Gratuito e senza chiavi: funziona al meglio su Chrome/Edge.
+ * Voce per dettare le risposte e far parlare il Prof. AI.
+ *  - Nel browser: API Web Speech (gratuite, al meglio su Chrome/Edge).
+ *  - Nell'app per telefono: riconoscimento e sintesi vocale del sistema
+ *    (Android/iOS), perche' dentro le app le API del browser non ci sono.
  */
 
 type SpeechRecognitionLike = {
@@ -24,6 +26,7 @@ function getRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
 }
 
 export function speechSupported(): { stt: boolean; tts: boolean } {
+  if (isNativeApp) return { stt: true, tts: true };
   return {
     stt: !!getRecognitionCtor(),
     tts: typeof window !== "undefined" && "speechSynthesis" in window,
@@ -37,13 +40,23 @@ export function useSpeechToText(onFinalTranscript: (text: string) => void) {
   const callbackRef = useRef(onFinalTranscript);
   callbackRef.current = onFinalTranscript;
 
-  const supported = !!getRecognitionCtor();
+  const supported = isNativeApp || !!getRecognitionCtor();
+  // Nell'app: ultimo testo riconosciuto, consegnato quando l'ascolto si ferma.
+  const nativeTextRef = useRef("");
 
   const stop = useCallback(() => {
+    if (isNativeApp) {
+      void import("@capacitor-community/speech-recognition").then(({ SpeechRecognition }) => SpeechRecognition.stop());
+      return;
+    }
     recognitionRef.current?.stop();
   }, []);
 
   const start = useCallback(() => {
+    if (isNativeApp) {
+      void startNative();
+      return;
+    }
     const Ctor = getRecognitionCtor();
     if (!Ctor) return;
 
@@ -86,7 +99,50 @@ export function useSpeechToText(onFinalTranscript: (text: string) => void) {
     recognition.start();
   }, []);
 
-  useEffect(() => () => recognitionRef.current?.abort(), []);
+  const startNative = useCallback(async () => {
+    const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
+    const { TextToSpeech } = await import("@capacitor-community/text-to-speech");
+    await TextToSpeech.stop().catch(() => undefined);
+    const perm = await SpeechRecognition.requestPermissions();
+    if (perm.speechRecognition !== "granted") return;
+
+    await SpeechRecognition.removeAllListeners();
+    nativeTextRef.current = "";
+    await SpeechRecognition.addListener("partialResults", (data: { matches?: string[] }) => {
+      const text = data.matches?.[0] ?? "";
+      nativeTextRef.current = text;
+      setInterim(text);
+    });
+    await SpeechRecognition.addListener("listeningState", (data: { status: "started" | "stopped" }) => {
+      if (data.status !== "stopped") return;
+      setListening(false);
+      setInterim("");
+      const text = nativeTextRef.current.trim();
+      nativeTextRef.current = "";
+      if (text) callbackRef.current(text);
+    });
+    setListening(true);
+    try {
+      await SpeechRecognition.start({ language: "it-IT", partialResults: true, popup: false, maxResults: 1 });
+    } catch {
+      setListening(false);
+      setInterim("");
+    }
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (isNativeApp) {
+        void import("@capacitor-community/speech-recognition").then(({ SpeechRecognition }) => {
+          void SpeechRecognition.stop().catch(() => undefined);
+          void SpeechRecognition.removeAllListeners();
+        });
+        return;
+      }
+      recognitionRef.current?.abort();
+    },
+    [],
+  );
 
   return { supported, listening, interim, start, stop };
 }
@@ -103,11 +159,11 @@ function pickItalianVoice(): SpeechSynthesisVoice | null {
 
 export function useTextToSpeech() {
   const [speaking, setSpeaking] = useState(false);
-  const supported = typeof window !== "undefined" && "speechSynthesis" in window;
+  const supported = isNativeApp || (typeof window !== "undefined" && "speechSynthesis" in window);
 
   // Su Chrome le voci arrivano in modo asincrono: questo le "scalda".
   useEffect(() => {
-    if (!supported) return;
+    if (!supported || isNativeApp) return;
     const warm = () => window.speechSynthesis.getVoices();
     warm();
     window.speechSynthesis.addEventListener?.("voiceschanged", warm);
@@ -121,6 +177,23 @@ export function useTextToSpeech() {
     (text: string, onEnd?: () => void) => {
       if (!supported || !text.trim()) {
         onEnd?.();
+        return;
+      }
+      if (isNativeApp) {
+        void (async () => {
+          const { TextToSpeech } = await import("@capacitor-community/text-to-speech");
+          await TextToSpeech.stop().catch(() => undefined);
+          setSpeaking(true);
+          try {
+            // La promessa si risolve a fine lettura.
+            await TextToSpeech.speak({ text, lang: "it-IT", rate: 1.0 });
+          } catch {
+            // Voce italiana non installata o lettura interrotta: si prosegue in silenzio.
+          } finally {
+            setSpeaking(false);
+            onEnd?.();
+          }
+        })();
         return;
       }
       window.speechSynthesis.cancel();
@@ -144,6 +217,11 @@ export function useTextToSpeech() {
   );
 
   const stopSpeaking = useCallback(() => {
+    if (isNativeApp) {
+      void import("@capacitor-community/text-to-speech").then(({ TextToSpeech }) => TextToSpeech.stop().catch(() => undefined));
+      setSpeaking(false);
+      return;
+    }
     window.speechSynthesis?.cancel();
     setSpeaking(false);
   }, []);

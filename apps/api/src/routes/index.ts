@@ -28,6 +28,7 @@ import recoveryRouter from "./recovery";
 import classMapRouter from "./classMap";
 import metricsRouter from "./metrics";
 import courseRouter from "./course";
+import devicesRouter from "./devices";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(recoveryRouter);
 router.use(classMapRouter);
 router.use(metricsRouter);
 router.use(courseRouter);
+router.use(devicesRouter);
 
 export default router;

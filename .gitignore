@@ -10,3 +10,10 @@ build/
 
 # Bundle API generato al build per Vercel
 api/_server.mjs
+
+# App mobile: configurazione Firebase e firme restano sul computer di chi compila.
+apps/web/android/app/google-services.json
+apps/web/ios/App/App/GoogleService-Info.plist
+*.keystore
+*.jks
+.env.mobile.local

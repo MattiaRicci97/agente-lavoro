@@ -1,3 +1,4 @@
+import { pushToStudents } from "./push";
 import { eq, and, inArray, isNull, ne, asc, sql } from "drizzle-orm";
 import {
   db,
@@ -282,6 +283,12 @@ export async function approveAndDistribute(set: RecoverySet, teacherId: number, 
         }),
       );
     }
+  });
+
+  await pushToStudents(Array.from(new Set(pairs.map((p) => p.studentId))), {
+    title: "Un ripasso mirato per te",
+    body: "Il tuo docente ha preparato qualche richiamo veloce. Lo trovi in Ripasso lampo.",
+    link: "/studio/lampo",
   });
 
   return { students: new Set(pairs.map((p) => p.studentId)).size, items: items.length };

@@ -69,6 +69,7 @@ const APP_TABLES = [
   "recovery_activities",
   "course_chunks",
   "study_plans",
+  "device_tokens",
 ];
 
 const MODULE_CATALOG: Array<{
@@ -413,6 +414,7 @@ async function main() {
       // Ricerca a tutto testo in italiano sui passaggi del corso.
       ["course_chunks_fts_idx", "course_chunks USING gin (to_tsvector('italian', content))"],
       ["study_plans_student_idx", "study_plans (student_id)"],
+      ["device_tokens_user_idx", "device_tokens (auth_user_id)"],
     ];
     for (const [name, target] of INDEXES) {
       await client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${target}`);
