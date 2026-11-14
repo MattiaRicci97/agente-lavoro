@@ -102,7 +102,7 @@ function SignBox({
         <DiagnosisEditor rows={diagnosis} options={objectiveOptions ?? []} onChange={setDecisions} />
       )}
 
-      <div className="flex gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <div className="w-24 space-y-1.5">
           <Label className="text-xs">Voto /10</Label>
           <Input
@@ -124,14 +124,14 @@ function SignBox({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
           Puoi confermare così com'è o correggere: allo studente arriva la <strong>tua</strong> versione.
         </p>
         <Button
           onClick={() => onSign(grade.trim() === "" ? null : Number(grade), feedback, decisions)}
           disabled={isPending}
-          className="shrink-0"
+          className="w-full shrink-0 sm:w-auto"
         >
           <CheckCircle2 className="mr-2 h-4 w-4" />
           {touched ? "Correggi e firma" : "Conferma e firma"}

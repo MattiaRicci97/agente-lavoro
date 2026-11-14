@@ -293,7 +293,7 @@ export default function StudioCorso() {
           </Card>
         )}
 
-        <div className="sticky bottom-4 flex items-end gap-2 rounded-2xl border bg-card p-2 shadow-sm">
+        <div className="sticky bottom-20 z-10 flex items-end gap-2 rounded-2xl border bg-card p-2 shadow-sm sm:bottom-4">
           <Textarea
             value={question}
             onChange={(e) => setQuestion(e.target.value)}

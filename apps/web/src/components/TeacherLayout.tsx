@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   BarChart3,
@@ -17,6 +18,8 @@ import {
   LifeBuoy,
   Grid3x3,
   LineChart,
+  Menu,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -77,10 +80,33 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
   });
   const toValidateCount = validations?.total ?? 0;
 
+  // Su telefono il menu e' a scomparsa: si apre dal pulsante in alto e si
+  // richiude da solo quando si cambia pagina.
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => setMenuOpen(false), [location]);
+
   return (
     <div className="flex min-h-screen flex-col bg-muted/40 md:flex-row">
-      <aside className="flex w-full flex-col border-r border-border/70 bg-card/80 backdrop-blur md:w-64">
-        <div className="border-b border-border/60 p-5">
+      <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/60 bg-card/95 px-4 backdrop-blur md:hidden">
+        <Link href="/cattedra">
+          <div className="flex cursor-pointer items-center gap-2">
+            <Logo className="text-primary" size="md" />
+          </div>
+        </Link>
+        <Button variant="ghost" size="icon" className="relative" onClick={() => setMenuOpen((o) => !o)} aria-label={menuOpen ? "Chiudi il menu" : "Apri il menu"}>
+          {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          {!menuOpen && toValidateCount + pendingCount > 0 ? (
+            <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-secondary" />
+          ) : null}
+        </Button>
+      </div>
+      <aside
+        className={cn(
+          "w-full flex-col border-r border-border/70 bg-card/80 backdrop-blur md:flex md:w-64",
+          menuOpen ? "fixed inset-x-0 bottom-0 top-14 z-20 flex overflow-y-auto bg-card" : "hidden",
+        )}
+      >
+        <div className="hidden border-b border-border/60 p-5 md:block">
           <Link href="/">
             <div className="flex cursor-pointer items-center gap-2">
               <Logo className="text-primary" size="md" />
@@ -141,7 +167,7 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="min-w-0 flex-1 overflow-auto">{children}</main>
     </div>
   );
 }

@@ -126,6 +126,8 @@ describe("normalizeGradeLevel", () => {
     expect(normalizeGradeLevel("  2^   Superiore ")).toBe("2ª Superiore");
     expect(normalizeGradeLevel("3 superiore")).toBe("3ª Superiore");
     expect(normalizeGradeLevel("2 media")).toBe("2ª Media");
+    expect(normalizeGradeLevel("4ª superiore")).toBe("4ª Superiore");
+    expect(normalizeGradeLevel("1a SUPERIORE")).toBe("1ª Superiore");
   });
 
   it("lascia stare etichette che non conosce", () => {

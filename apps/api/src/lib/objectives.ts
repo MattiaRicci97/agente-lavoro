@@ -227,11 +227,11 @@ export async function assignableObjectiveIds(teacherId: number, candidateIds: nu
  * forma sola, cosi' il confronto con la mappa non fallisce per un carattere.
  */
 export function normalizeGradeLevel(label: string): string {
-  return label
-    .trim()
-    .replace(/\^/g, "\u00aa")
-    .replace(/\s+/g, " ")
-    .replace(/^(\d)\s*(superiore|media)$/i, (_m, n, kind) => `${n}\u00aa ${kind[0].toUpperCase()}${kind.slice(1).toLowerCase()}`);
+  const clean = label.trim().replace(/\s+/g, " ");
+  // "1^ Superiore", "1ª superiore", "1 SUPERIORE", "1a media" -> "1ª Superiore" / "1ª Media"
+  const m = clean.match(/^(\d)\s*[\^\u00aaa\u00b0]?\s*(superiore|media)$/i);
+  if (!m) return clean.replace(/\^/g, "\u00aa");
+  return `${m[1]}\u00aa ${m[2][0].toUpperCase()}${m[2].slice(1).toLowerCase()}`;
 }
 
 /**
