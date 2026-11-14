@@ -17,3 +17,6 @@ apps/web/ios/App/App/GoogleService-Info.plist
 *.keystore
 *.jks
 .env.mobile.local
+
+# Il modello della configurazione mobile (senza segreti) va condiviso.
+!.env.mobile.example
