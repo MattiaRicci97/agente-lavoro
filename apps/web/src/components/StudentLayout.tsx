@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LogOut, BookMarked, CalendarClock, UserCircle, PiggyBank, ScanLine, Megaphone } from "lucide-react";
+import { LogOut, BookMarked, CalendarClock, UserCircle, PiggyBank, ScanLine, Megaphone, MessagesSquare } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@sillabo/api-client-react";
@@ -72,6 +72,7 @@ export function StudentLayout({ children }: { children: React.ReactNode }) {
               active={location === "/studio/bacheca"}
               badge={unread?.unread ?? 0}
             />
+            <NavLink href="/studio/corso" icon={MessagesSquare} label="Chiedi al corso" active={location === "/studio/corso"} />
             <NavLink href="/studio/ripasso" icon={CalendarClock} label="Ripasso" active={location === "/studio/ripasso"} />
             <NavLink href="/studio/foto" icon={ScanLine} label="Correggi" active={location === "/studio/foto"} />
             <NavLink

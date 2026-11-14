@@ -827,3 +827,161 @@ export async function generateFollowupExam(input: {
   if (!parsed.success) throw new Error("La verifica proposta dall'AI non e' nel formato atteso. Riprova.");
   return parsed.data.prompt;
 }
+
+// ---------------------------------------------------------------------------
+// Assistente del corso
+// ---------------------------------------------------------------------------
+
+export interface CoursePassage {
+  /** Etichetta con cui citare la fonte (titolo del documento o lezione con data). */
+  source: string;
+  content: string;
+}
+
+function formatPassages(passages: CoursePassage[], startAt = 1): string {
+  if (!passages.length) return "(nessun passaggio trovato nel materiale del corso)";
+  return passages.map((p, i) => `[${startAt + i}] ${p.source}\n${p.content}`).join("\n\n");
+}
+
+/**
+ * La chat di ripasso sul corso. Il modello riceve i passaggi trovati per la
+ * domanda e puo' cercarne altri con parole diverse (strumento cerca_nel_corso):
+ * e' cosi' che una domanda detta "a parole proprie" trova il lessico del corso.
+ * Risponde solo da quello che trova; se non c'e', lo dice.
+ * Non riceve il nome dello studente ne' i suoi voti.
+ */
+export async function askCourseAssistant(input: {
+  subject: string;
+  gradeLevel: string;
+  besDsa: boolean;
+  history: Array<{ role: "user" | "assistant"; content: string }>;
+  question: string;
+  initialPassages: CoursePassage[];
+  search: (query: string) => Promise<CoursePassage[]>;
+}): Promise<{ answer: string; usedPassages: CoursePassage[] }> {
+  const used = [...input.initialPassages];
+  const inclusivo = input.besDsa
+    ? "Lo studente ha dichiarato BES/DSA: frasi brevi, lessico semplice, un concetto alla volta, elenchi puntati. "
+    : "";
+  const system =
+    `Sei l'assistente di ripasso di Sillabo per il corso di ${input.subject} (${input.gradeLevel}). ` +
+    "Aiuti uno studente a ripassare usando SOLO il materiale che il suo docente ha condiviso con la classe: documenti e trascrizioni delle lezioni. " +
+    "Ti vengono dati dei passaggi numerati trovati nel corso. Se non bastano, usa lo strumento cerca_nel_corso con parole chiave diverse (i termini tecnici dell'argomento), al massimo due volte. " +
+    "Rispondi in italiano, con tono caldo e chiaro. Cita le fonti tra parentesi quadre con il loro numero, es. [2]. " +
+    "Se nel materiale del corso l'argomento non c'e', dillo con semplicita' e suggerisci di chiederlo al docente: non inventare e non attingere ad altre fonti. " +
+    "Non svolgere i compiti al posto dello studente: spiega e guida. " +
+    "Quando ha senso, ricorda che puo' chiederti un piano di ripasso o di simulare un'interrogazione sull'argomento. " +
+    inclusivo;
+
+  const messages: Anthropic.MessageParam[] = [
+    ...input.history.map((m) => ({ role: m.role, content: m.content }) as Anthropic.MessageParam),
+    {
+      role: "user",
+      content: `Passaggi trovati nel corso:\n${formatPassages(input.initialPassages)}\n\nDomanda dello studente: ${input.question}`,
+    },
+  ];
+  const tools: Anthropic.Tool[] = [
+    {
+      name: "cerca_nel_corso",
+      description: "Cerca altri passaggi nei documenti e nelle lezioni del corso. Usa poche parole chiave specifiche.",
+      input_schema: {
+        type: "object",
+        properties: { query: { type: "string", description: "Parole chiave da cercare" } },
+        required: ["query"],
+      },
+    },
+  ];
+
+  for (let round = 0; round < 3; round += 1) {
+    const message = await getAnthropic().messages.create({
+      model: MODEL,
+      max_tokens: 1500,
+      system,
+      messages,
+      // All'ultimo giro niente strumenti: deve rispondere con quello che ha.
+      ...(round < 2 ? { tools } : {}),
+    });
+    const toolUses = message.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+    if (!toolUses.length) {
+      const text = message.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("\n")
+        .trim();
+      if (!text) throw new Error("Anthropic non ha restituito testo");
+      return { answer: text, usedPassages: used };
+    }
+    messages.push({ role: "assistant", content: message.content });
+    const results: Anthropic.ToolResultBlockParam[] = [];
+    for (const use of toolUses) {
+      const query = typeof (use.input as { query?: unknown }).query === "string" ? (use.input as { query: string }).query : "";
+      const found = query ? await input.search(query.slice(0, 200)) : [];
+      // Non ripetere passaggi gia' forniti; la numerazione prosegue.
+      const fresh = found.filter((f) => !used.some((u) => u.content === f.content));
+      const startAt = used.length + 1;
+      used.push(...fresh);
+      results.push({ type: "tool_result", tool_use_id: use.id, content: formatPassages(fresh, startAt) });
+    }
+    messages.push({ role: "user", content: results });
+  }
+  throw new Error("L'assistente non e' riuscito a concludere la risposta");
+}
+
+export const ReviewPlanSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  summary: z.string().trim().max(1000).default(""),
+  steps: z
+    .array(
+      z.object({
+        title: z.string().trim().min(1).max(200),
+        activity: z.string().trim().min(1).max(1500),
+        minutes: z.number().int().min(5).max(120).default(20),
+        sources: z.array(z.number().int().positive()).max(8).default([]),
+      }),
+    )
+    .min(1)
+    .max(8),
+});
+export type ReviewPlanDraft = z.infer<typeof ReviewPlanSchema>;
+
+/**
+ * Piano di ripasso su un argomento, costruito sui passaggi del corso. Dello
+ * studente il modello conosce solo i titoli degli obiettivi che ha ancora da
+ * consolidare in quella materia: servono a decidere su cosa insistere.
+ */
+export async function generateReviewPlan(input: {
+  subject: string;
+  gradeLevel: string;
+  topic: string;
+  besDsa: boolean;
+  passages: CoursePassage[];
+  objectivesToConsolidate: string[];
+}): Promise<ReviewPlanDraft> {
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 2500,
+    system:
+      "Sei un docente italiano che prepara un piano di ripasso breve e concreto per uno studente delle superiori, usando SOLO il materiale del corso fornito. " +
+      "Da 3 a 6 passi, in ordine: ogni passo dice cosa rileggere o rifare e come verificare da soli di aver capito. " +
+      "Nei 'sources' di ogni passo metti i numeri dei passaggi su cui si basa. Non inventare contenuti che non sono nei passaggi. " +
+      (input.besDsa ? "Lo studente ha dichiarato BES/DSA: passi brevi, una sola cosa per passo, linguaggio semplice. " : "") +
+      "Rispondi SOLO con JSON valido.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Materia: ${input.subject}\nClasse: ${input.gradeLevel}\nArgomento da ripassare: ${input.topic}\n` +
+          (input.objectivesToConsolidate.length
+            ? `Obiettivi che lo studente deve ancora consolidare: ${input.objectivesToConsolidate.join("; ")}\n`
+            : "") +
+          `\nPassaggi del corso:\n${formatPassages(input.passages)}\n\n` +
+          `Rispondi con JSON: {"title": "...", "summary": "una frase", "steps": [{"title": "...", "activity": "...", "minutes": 20, "sources": [1, 2]}]}`,
+      },
+    ],
+  });
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("Anthropic non ha restituito testo");
+  const parsed = ReviewPlanSchema.safeParse(extractJson<unknown>(textBlock.text));
+  if (!parsed.success) throw new Error("Il piano proposto dall'AI non e' nel formato atteso. Riprova.");
+  return parsed.data;
+}

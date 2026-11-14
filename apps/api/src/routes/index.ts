@@ -27,6 +27,7 @@ import objectivesRouter from "./objectives";
 import recoveryRouter from "./recovery";
 import classMapRouter from "./classMap";
 import metricsRouter from "./metrics";
+import courseRouter from "./course";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use(objectivesRouter);
 router.use(recoveryRouter);
 router.use(classMapRouter);
 router.use(metricsRouter);
+router.use(courseRouter);
 
 export default router;

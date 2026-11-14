@@ -16,6 +16,7 @@ import { attachClassIds } from "../lib/materialClasses";
 import { materialVisibilityFilter, teacherCanManageMaterial } from "../lib/materialAccess";
 import { announceToClasses } from "../lib/classFeed";
 import { candidateObjectivesForMaterial } from "../lib/objectives";
+import { indexMaterial } from "../lib/courseSearch";
 import {
   extractTextFromUploadedFile,
   UnsupportedFileTypeError,
@@ -140,14 +141,33 @@ router.post("/materials", requireTeacher, async (req, res): Promise<void> => {
     return;
   }
 
+  // Tipo e data della lezione non fanno parte dello schema generato.
+  const extra = z
+    .object({
+      kind: z.enum(["documento", "lezione"]).optional(),
+      lessonDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    })
+    .safeParse(req.body);
+  const kind = extra.success ? (extra.data.kind ?? "documento") : "documento";
+  const lessonDate = extra.success && kind === "lezione" ? (extra.data.lessonDate ?? null) : null;
+
   const materialInput = {
     ...rest,
+    kind,
+    lessonDate,
     teacherId: req.teacher!.id,
     content: finalContent,
     fileUrl: fileUrl ?? null,
     fileName: fileName ?? null,
   };
   const [material] = await db.insert(materialsTable).values(materialInput).returning();
+
+  // Entra nell'archivio del corso, su cui lavora la chat di ripasso.
+  try {
+    await indexMaterial(material);
+  } catch (err) {
+    req.log.error({ err, materialId: material.id }, "Indicizzazione del materiale non riuscita (verra' ritentata alla prima ricerca)");
+  }
 
   if (classIds?.length) {
     await db

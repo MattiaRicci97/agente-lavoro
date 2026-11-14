@@ -20,6 +20,12 @@ export const oralSessionsTable = pgTable("oral_sessions", {
   classId: integer("class_id"),
   studentName: text("student_name").notNull(),
   status: text("status").notNull().default("in_corso"),
+  /**
+   * Interrogazione su un argomento del corso (chiesta dalla chat di ripasso):
+   * l'argomento e i passaggi del corso su cui verte, fissati all'avvio.
+   */
+  focusTopic: text("focus_topic"),
+  focusContent: text("focus_content"),
   // --- Proposta dell'assistente ---
   grade: integer("grade"),
   feedback: text("feedback"),

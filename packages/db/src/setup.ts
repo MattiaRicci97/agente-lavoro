@@ -67,6 +67,8 @@ const APP_TABLES = [
   "recovery_items",
   "student_notices",
   "recovery_activities",
+  "course_chunks",
+  "study_plans",
 ];
 
 const MODULE_CATALOG: Array<{
@@ -407,6 +409,10 @@ async function main() {
       ["recovery_items_set_idx", "recovery_items (recovery_set_id)"],
       ["student_notices_student_idx", "student_notices (student_id, read_at)"],
       ["written_exams_recovery_set_idx", "written_exams (recovery_set_id)"],
+      ["course_chunks_material_idx", "course_chunks (material_id)"],
+      // Ricerca a tutto testo in italiano sui passaggi del corso.
+      ["course_chunks_fts_idx", "course_chunks USING gin (to_tsvector('italian', content))"],
+      ["study_plans_student_idx", "study_plans (student_id)"],
     ];
     for (const [name, target] of INDEXES) {
       await client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${target}`);

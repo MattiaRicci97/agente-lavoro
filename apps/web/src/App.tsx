@@ -18,6 +18,7 @@ import CattedraObiettivi from "./pages/CattedraObiettivi";
 import CattedraRecupero from "./pages/CattedraRecupero";
 import CattedraMappa from "./pages/CattedraMappa";
 import CattedraEfficacia from "./pages/CattedraEfficacia";
+import StudioCorso from "./pages/StudioCorso";
 import CattedraClassi from "./pages/CattedraClassi";
 import CattedraProfilo from "./pages/CattedraProfilo";
 import CattedraAssistente from "./pages/CattedraAssistente";
@@ -290,6 +291,11 @@ function Router() {
       <Route path="/studio">
         <StudentGate>
           <StudioDashboard />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/corso">
+        <StudentGate>
+          <StudioCorso />
         </StudentGate>
       </Route>
       <Route path="/studio/bacheca">

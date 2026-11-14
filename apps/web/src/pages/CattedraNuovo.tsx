@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,7 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Loader2, FileUp, FileText, X } from "lucide-react";
 import { Link } from "wouter";
 
-const ACCEPTED_EXTENSIONS = [".pdf", ".doc", ".docx"];
+const ACCEPTED_EXTENSIONS = [".pdf", ".doc", ".docx", ".txt", ".vtt", ".srt"];
 
 const schema = z
   .object({
@@ -42,6 +42,9 @@ export default function CattedraNuovo() {
   const { data: classes } = useListClasses();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Documento (dispensa, capitolo) o trascrizione di una lezione tenuta in classe.
+  const [kind, setKind] = useState<"documento" | "lezione">("documento");
+  const [lessonDate, setLessonDate] = useState("");
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -72,7 +75,7 @@ export default function CattedraNuovo() {
     if (!ACCEPTED_EXTENSIONS.some((ext) => lowerName.endsWith(ext))) {
       toast({
         title: "Formato non supportato",
-        description: "Sono ammessi solo file PDF e Word (.pdf, .doc, .docx).",
+        description: "Sono ammessi PDF, Word e, per le trascrizioni, .txt, .vtt o .srt.",
         variant: "destructive",
       });
       e.target.value = "";
@@ -103,6 +106,8 @@ export default function CattedraNuovo() {
           fileUrl: fileUrl || undefined,
           fileName: fileName || undefined,
           classIds: classIds.map((id) => parseInt(id)),
+          // Campi dell'archivio del corso, non presenti nello schema generato.
+          ...({ kind, lessonDate: kind === "lezione" && lessonDate ? lessonDate : null } as object),
         },
       },
       {
@@ -142,6 +147,34 @@ export default function CattedraNuovo() {
         <div className="bg-card border rounded-xl p-6 shadow-sm">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-medium">Cosa stai caricando?</span>
+                  <div className="inline-flex rounded-md border overflow-hidden bg-card">
+                    {(["documento", "lezione"] as const).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setKind(k)}
+                        className={"px-3 py-1.5 text-sm transition-colors " + (kind === k ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
+                      >
+                        {k === "documento" ? "Documento" : "Lezione (trascrizione)"}
+                      </button>
+                    ))}
+                  </div>
+                  {kind === "lezione" && (
+                    <label className="flex items-center gap-2 text-sm">
+                      Tenuta il
+                      <Input type="date" className="w-44 bg-card" value={lessonDate} onChange={(e) => setLessonDate(e.target.value)} />
+                    </label>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {kind === "lezione"
+                    ? "Carica o incolla la trascrizione della lezione (.txt, .vtt, .srt, oppure PDF/Word): Meet, Teams e molti registratori la esportano. Rileggila prima di condividerla: gli studenti la potranno interrogare dalla chat di ripasso."
+                    : "Tutto il materiale condiviso con la classe entra nell'archivio del corso, su cui gli studenti possono fare domande dalla chat di ripasso."}
+                </p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -238,13 +271,13 @@ export default function CattedraNuovo() {
                 name="fileUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Carica il materiale (PDF o Word)</FormLabel>
+                    <FormLabel>Carica il file (PDF, Word o trascrizione)</FormLabel>
                     <FormControl>
                       <div>
                         <input
                           ref={fileInputRef}
                           type="file"
-                          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                          accept=".pdf,.doc,.docx,.txt,.vtt,.srt,text/plain,text/vtt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                           className="hidden"
                           onChange={handleFileChange}
                           disabled={isUploading}

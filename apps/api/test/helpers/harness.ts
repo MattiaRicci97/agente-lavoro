@@ -27,7 +27,7 @@ export interface Harness {
    * testo viene restituito come unico blocco. Senza una risposta impostata la
    * chiamata fallisce con 500, come farebbe un servizio non raggiungibile.
    */
-  anthropicReplies(fn: (request: { system?: string; messages: unknown[] }) => string): void;
+  anthropicReplies(fn: (request: { system?: string; messages: unknown[] }) => string | unknown[]): void;
   /** Le richieste ricevute dal finto Anthropic, per controllare cosa e' stato inviato. */
   anthropicRequests: Array<{ system?: string; messages: unknown[] }>;
   stop(): Promise<void>;
@@ -69,7 +69,7 @@ export async function startHarness(): Promise<Harness> {
 
   // Anthropic finto: l'SDK rispetta ANTHROPIC_BASE_URL, quindi l'API vera
   // parla con questo server senza saperlo.
-  let reply: ((request: { system?: string; messages: unknown[] }) => string) | null = null;
+  let reply: ((request: { system?: string; messages: unknown[] }) => string | unknown[]) | null = null;
   const anthropicRequests: Array<{ system?: string; messages: unknown[] }> = [];
   const anthropic = http.createServer((req, res) => {
     let body = "";
@@ -87,6 +87,7 @@ export async function startHarness(): Promise<Harness> {
         res.end(JSON.stringify({ type: "error", error: { type: "api_error", message: "nessuna risposta impostata nel test" } }));
         return;
       }
+      const out = reply(parsed);
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
@@ -94,8 +95,9 @@ export async function startHarness(): Promise<Harness> {
           type: "message",
           role: "assistant",
           model: "test",
-          content: [{ type: "text", text: reply(parsed) }],
-          stop_reason: "end_turn",
+          // Una stringa e' una risposta di testo; un array sono blocchi (es. tool_use).
+          content: typeof out === "string" ? [{ type: "text", text: out }] : out,
+          stop_reason: typeof out !== "string" && out.some((b) => (b as { type?: string }).type === "tool_use") ? "tool_use" : "end_turn",
           stop_sequence: null,
           usage: { input_tokens: 1, output_tokens: 1 },
         }),

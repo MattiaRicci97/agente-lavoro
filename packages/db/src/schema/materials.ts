@@ -20,6 +20,10 @@ export const materialsTable = pgTable("materials", {
   curriculumTopic: text("curriculum_topic"),
   curriculumSubtopic: text("curriculum_subtopic"),
   simplifiedContent: text("simplified_content"),
+  /** "documento" (dispensa, capitolo, appunti) | "lezione" (trascrizione di una lezione). */
+  kind: text("kind").notNull().default("documento"),
+  /** Per le lezioni: il giorno in cui si e' tenuta (YYYY-MM-DD). */
+  lessonDate: text("lesson_date"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -43,6 +47,8 @@ export const insertMaterialSchema = createInsertSchema(materialsTable).omit({
   curriculumTopic: true,
   curriculumSubtopic: true,
   simplifiedContent: true,
+  kind: true,
+  lessonDate: true,
 });
 export type InsertMaterial = z.infer<typeof insertMaterialSchema>;
 export type Material = typeof materialsTable.$inferSelect;
