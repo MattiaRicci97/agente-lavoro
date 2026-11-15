@@ -39,7 +39,32 @@ export interface GeneratedQuestion {
   answer: string;
   topic: string;
   difficulty: "facile" | "medio" | "difficile";
+  hints: string[];
 }
+
+export const MAX_HINTS = 3;
+const MAX_HINT_LENGTH = 300;
+
+/**
+ * Ripulisce gli aiuti proposti dal modello (o scritti dal docente): solo
+ * stringhe non vuote, al massimo tre, ciascuna breve. Qualsiasi altra cosa
+ * viene scartata invece di far fallire la domanda intera.
+ */
+export function normalizeHints(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((h): h is string => typeof h === "string")
+    .map((h) => h.trim())
+    .filter((h) => h.length > 0)
+    .map((h) => (h.length > MAX_HINT_LENGTH ? `${h.slice(0, MAX_HINT_LENGTH - 1).trimEnd()}…` : h))
+    .slice(0, MAX_HINTS);
+}
+
+/** Le istruzioni sugli aiuti, uguali ovunque il modello ne scriva. */
+const HINTS_RULES =
+  "Gli aiuti (hints) sono da 2 a 3 indizi progressivi per lo studente bloccato: il primo orienta soltanto (che cosa richiamare alla mente), " +
+  "il secondo suggerisce il metodo o il passaggio da cui partire, l'eventuale terzo avvicina di piu' ma lascia l'ultimo passo allo studente. " +
+  "Un aiuto non contiene MAI la risposta ne' il risultato finale.";
 
 export async function generateActiveRecallQuestions(
   materialTitle: string,
@@ -61,7 +86,8 @@ export async function generateActiveRecallQuestions(
           `Materia: ${subject}\nLivello scolastico: ${gradeLevel}\nTitolo: ${materialTitle}\n\n` +
           `Contenuto della lezione:\n${content}\n\n` +
           `Genera tra 6 e 10 domande a richiamo attivo su questo materiale. Per ognuna indica anche l'argomento specifico (topic, breve, 2-4 parole) e una difficolta' tra "facile", "medio", "difficile". ` +
-          `Rispondi con un array JSON del tipo: [{"question": "...", "answer": "...", "topic": "...", "difficulty": "facile|medio|difficile"}]`,
+          `Per ognuna scrivi anche gli aiuti. ${HINTS_RULES} ` +
+          `Rispondi con un array JSON del tipo: [{"question": "...", "answer": "...", "topic": "...", "difficulty": "facile|medio|difficile", "hints": ["...", "..."]}]`,
       },
     ],
   });
@@ -71,7 +97,7 @@ export async function generateActiveRecallQuestions(
     throw new Error("Anthropic non ha restituito testo");
   }
 
-  const parsed = extractJson<GeneratedQuestion[]>(textBlock.text);
+  const parsed = extractJson<GeneratedQuestion[]>(textBlock.text).map((q) => ({ ...q, hints: normalizeHints(q.hints) }));
   logger.info({ count: parsed.length }, "Generated active recall questions");
   return parsed;
 }
@@ -684,6 +710,7 @@ export interface RecoveryQuestionDraft {
   objectiveCode: string;
   question: string;
   answer: string;
+  hints: string[];
 }
 
 export const RecoveryQuestionsSchema = z.object({
@@ -693,6 +720,7 @@ export const RecoveryQuestionsSchema = z.object({
         objectiveCode: z.string().trim().min(1).max(40),
         question: z.string().trim().min(5).max(600),
         answer: z.string().trim().min(1).max(1200),
+        hints: z.unknown().optional(),
       }),
     )
     .max(60),
@@ -703,7 +731,9 @@ export function parseRecoveryQuestions(raw: unknown, codes: string[]): RecoveryQ
   const parsed = RecoveryQuestionsSchema.safeParse(raw);
   if (!parsed.success) throw new Error("Le domande proposte dall'AI non sono nel formato atteso. Riprova.");
   const allowed = new Set(codes);
-  return parsed.data.questions.filter((q) => allowed.has(q.objectiveCode));
+  return parsed.data.questions
+    .filter((q) => allowed.has(q.objectiveCode))
+    .map((q) => ({ ...q, hints: normalizeHints(q.hints) }));
 }
 
 /**
@@ -737,8 +767,8 @@ export async function generateRecoveryQuestions(input: {
         role: "user",
         content:
           `Materia: ${input.subject}\nClasse: ${input.gradeLevel}\n\nObiettivi da riprendere:\n${list}\n\n` +
-          `Scrivi ${input.perObjective} domande per ciascun obiettivo. ` +
-          `Rispondi con JSON: {"questions": [{"objectiveCode": "...", "question": "...", "answer": "..."}]}`,
+          `Scrivi ${input.perObjective} domande per ciascun obiettivo, ognuna con i suoi aiuti. ${HINTS_RULES} ` +
+          `Rispondi con JSON: {"questions": [{"objectiveCode": "...", "question": "...", "answer": "...", "hints": ["...", "..."]}]}`,
       },
     ],
   });
@@ -747,6 +777,60 @@ export async function generateRecoveryQuestions(input: {
   return parseRecoveryQuestions(
     extractJson<unknown>(textBlock.text),
     input.objectives.map((o) => o.code),
+  );
+}
+
+export const HintsDraftSchema = z.object({
+  items: z.array(z.object({ id: z.number().int(), hints: z.unknown() })).max(80),
+});
+
+/** Tiene solo gli aiuti riferiti a una domanda richiesta, ripuliti. */
+export function parseHintsDraft(raw: unknown, ids: number[]): Map<number, string[]> {
+  const parsed = HintsDraftSchema.safeParse(raw);
+  if (!parsed.success) throw new Error("Gli aiuti proposti dall'AI non sono nel formato atteso. Riprova.");
+  const allowed = new Set(ids);
+  const out = new Map<number, string[]>();
+  for (const item of parsed.data.items) {
+    const hints = normalizeHints(item.hints);
+    if (allowed.has(item.id) && hints.length) out.set(item.id, hints);
+  }
+  return out;
+}
+
+/**
+ * Bozza degli aiuti per domande che ne sono prive. Al modello vanno solo
+ * domanda e risposta attesa: nessun dato sugli studenti. Il docente rilegge.
+ */
+export async function generateHints(input: {
+  subject: string;
+  gradeLevel: string;
+  questions: Array<{ id: number; question: string; answer: string }>;
+}): Promise<Map<number, string[]>> {
+  const list = input.questions
+    .map((q) => `[${q.id}] Domanda: ${q.question}\nRisposta attesa: ${q.answer}`)
+    .join("\n\n");
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 4096,
+    system:
+      "Sei un docente italiano di scuola superiore che prepara indizi per gli studenti che si bloccano su una domanda di ripasso. " +
+      HINTS_RULES +
+      " Rispondi SOLO con JSON valido.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Materia: ${input.subject}\nClasse: ${input.gradeLevel}\n\n${list}\n\n` +
+          `Scrivi gli aiuti per ciascuna domanda, usando il numero tra parentesi quadre come id. ` +
+          `Rispondi con JSON: {"items": [{"id": 0, "hints": ["...", "..."]}]}`,
+      },
+    ],
+  });
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("Anthropic non ha restituito testo");
+  return parseHintsDraft(
+    extractJson<unknown>(textBlock.text),
+    input.questions.map((q) => q.id),
   );
 }
 

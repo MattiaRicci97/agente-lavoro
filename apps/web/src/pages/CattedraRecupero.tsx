@@ -11,12 +11,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { LifeBuoy, Sparkles, Loader2, CheckCircle2, Pencil, Trash2, Plus, Users, X, CalendarClock, ClipboardCheck } from "lucide-react";
+import { HintsEditor, HintsPreview, cleanHints } from "@/components/HintsEditor";
 import { ERROR_TYPE_LABEL, type DiagnosisErrorType } from "@/lib/diagnosis";
 
 interface Question {
   id: number;
   question: string;
   answer: string;
+  hints?: string[];
   authorType: "ai" | "docente";
 }
 
@@ -147,25 +149,27 @@ function QuestionRow({
 }: {
   q: Question;
   editable: boolean;
-  onSave: (id: number, body: { question: string; answer: string }) => Promise<unknown>;
+  onSave: (id: number, body: { question: string; answer: string; hints: string[] }) => Promise<unknown>;
   onDelete: (id: number) => void;
   busy: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [question, setQuestion] = useState(q.question);
   const [answer, setAnswer] = useState(q.answer);
+  const [hints, setHints] = useState<string[]>(q.hints ?? []);
 
   if (editing) {
     return (
       <div className="rounded-lg border p-3 space-y-2 bg-card">
         <Textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={2} />
         <Textarea value={answer} onChange={(e) => setAnswer(e.target.value)} rows={2} placeholder="Risposta di riferimento" />
+        <HintsEditor value={hints} onChange={setHints} />
         <div className="flex gap-2">
           <Button
             size="sm"
             disabled={busy || question.trim().length < 5 || !answer.trim()}
             onClick={async () => {
-              await onSave(q.id, { question: question.trim(), answer: answer.trim() });
+              await onSave(q.id, { question: question.trim(), answer: answer.trim(), hints: cleanHints(hints) });
               setEditing(false);
             }}
           >
@@ -183,6 +187,11 @@ function QuestionRow({
       <div className="min-w-0 flex-1">
         <p className="whitespace-pre-wrap">{q.question}</p>
         <p className="mt-1 whitespace-pre-wrap text-muted-foreground">→ {q.answer}</p>
+        {(q.hints?.length ?? 0) > 0 && (
+          <div className="mt-2">
+            <HintsPreview hints={q.hints} />
+          </div>
+        )}
         {q.authorType === "ai" && <span className="mt-1 inline-block text-xs text-muted-foreground">proposta dell'assistente</span>}
       </div>
       {editable && (
@@ -199,10 +208,11 @@ function QuestionRow({
   );
 }
 
-function AddQuestion({ onAdd, busy }: { onAdd: (body: { question: string; answer: string }) => Promise<unknown>; busy: boolean }) {
+function AddQuestion({ onAdd, busy }: { onAdd: (body: { question: string; answer: string; hints: string[] }) => Promise<unknown>; busy: boolean }) {
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [hints, setHints] = useState<string[]>([]);
   if (!open) {
     return (
       <Button size="sm" variant="ghost" className="text-xs" onClick={() => setOpen(true)}>
@@ -214,12 +224,14 @@ function AddQuestion({ onAdd, busy }: { onAdd: (body: { question: string; answer
     <div className="rounded-lg border border-dashed p-3 space-y-2">
       <Textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={2} placeholder="Domanda" />
       <Textarea value={answer} onChange={(e) => setAnswer(e.target.value)} rows={2} placeholder="Risposta di riferimento" />
+      <HintsEditor value={hints} onChange={setHints} />
       <div className="flex gap-2">
         <Button
           size="sm"
           disabled={busy || question.trim().length < 5 || !answer.trim()}
           onClick={async () => {
-            await onAdd({ question: question.trim(), answer: answer.trim() });
+            await onAdd({ question: question.trim(), answer: answer.trim(), hints: cleanHints(hints) });
+            setHints([]);
             setQuestion("");
             setAnswer("");
             setOpen(false);

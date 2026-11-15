@@ -11,12 +11,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Loader2, CheckCircle2, XCircle, Target } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { HintLadder } from "@/components/HintLadder";
 
 interface QuizSetQuestion {
   id: number;
   question: string;
   topic: string;
   difficulty: string;
+  hints?: string[];
 }
 interface QuizSet {
   questions: QuizSetQuestion[];
@@ -230,6 +232,7 @@ export default function StudioQuiz() {
                       <Badge variant="outline" className="text-[10px] capitalize">{q.difficulty}</Badge>
                     </div>
                   </div>
+                  <HintLadder hints={q.hints} />
                   <Textarea
                     placeholder="Scrivi la tua risposta qui..."
                     className="min-h-[120px] text-base p-4"

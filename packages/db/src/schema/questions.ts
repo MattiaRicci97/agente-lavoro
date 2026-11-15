@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { materialsTable } from "./materials";
@@ -31,6 +31,17 @@ export const questionsTable = pgTable("questions", {
   editedByTeacher: boolean("edited_by_teacher").notNull().default(false),
   /** Obiettivo di apprendimento che la domanda allena (null = non ancora collegata). */
   objectiveId: integer("objective_id").references(() => learningObjectivesTable.id, { onDelete: "set null" }),
+  /**
+   * Aiuti progressivi: da uno a tre indizi, dal piu' leggero al piu' esplicito,
+   * che lo studente bloccato puo' chiedere uno alla volta. Non contengono la
+   * risposta.
+   */
+  hints: jsonb("hints").$type<string[]>().notNull().default([]),
+  /**
+   * "bozza" | "approvati". Gli aiuti proposti dall'assistente restano bozza
+   * finche' il docente non li approva: solo allora gli studenti li vedono.
+   */
+  hintsStatus: text("hints_status").notNull().default("approvati"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

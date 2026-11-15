@@ -151,7 +151,14 @@ router.get("/materials/:id/quiz-set", requireAuth, async (req, res): Promise<voi
   }
 
   res.json({
-    questions: picked.map((q) => ({ id: q.id, question: q.question, topic: q.topic, difficulty: q.difficulty })),
+    questions: picked.map((q) => ({
+      id: q.id,
+      question: q.question,
+      topic: q.topic,
+      difficulty: q.difficulty,
+      // Solo gli aiuti che il docente ha approvato.
+      hints: q.hintsStatus === "approvati" ? q.hints : [],
+    })),
     focusTopics: weakTopics.slice(0, 3),
     level,
   });

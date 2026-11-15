@@ -124,7 +124,7 @@ export interface RecoverySetDetail {
     description: string;
     studentsCount: number;
     errorTypes: Record<string, number>;
-    questions: Array<{ id: number; question: string; answer: string; authorType: string }>;
+    questions: Array<{ id: number; question: string; answer: string; hints: string[]; authorType: string }>;
   }>;
   studentsCount: number;
   progress: { done: number; total: number } | null;
@@ -194,7 +194,7 @@ export async function recoverySetDetail(set: RecoverySet): Promise<RecoverySetDe
         errorTypes,
         questions: questions
           .filter((q) => q.objectiveId === o.id)
-          .map((q) => ({ id: q.id, question: q.question, answer: q.answer, authorType: q.authorType })),
+          .map((q) => ({ id: q.id, question: q.question, answer: q.answer, hints: q.hints, authorType: q.authorType })),
       };
     }),
     studentsCount: new Set(gaps.map((g) => g.studentId)).size,

@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { HintLadder } from "@/components/HintLadder";
 import { Eye, ThumbsUp, RotateCcw, PartyPopper, Target } from "lucide-react";
 
 export interface RecoveryDue {
@@ -15,6 +16,7 @@ export interface RecoveryDue {
   objectiveTitle: string;
   question: string;
   answer: string;
+  hints?: string[];
 }
 
 /**
@@ -110,9 +112,12 @@ export function RecoveryLampo({ due, onDone }: { due: RecoveryDue[]; onDone: () 
               </div>
             </>
           ) : (
-            <Button className="w-full" onClick={() => setRevealed(true)}>
-              <Eye className="mr-2 h-4 w-4" /> Prova a rispondere, poi mostra la risposta
-            </Button>
+            <div className="space-y-3">
+              <HintLadder key={current.id} hints={current.hints} />
+              <Button className="w-full" onClick={() => setRevealed(true)}>
+                <Eye className="mr-2 h-4 w-4" /> Prova a rispondere, poi mostra la risposta
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>

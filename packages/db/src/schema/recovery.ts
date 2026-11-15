@@ -66,6 +66,8 @@ export const recoveryQuestionsTable = pgTable("recovery_questions", {
     .references(() => learningObjectivesTable.id, { onDelete: "cascade" }),
   question: text("question").notNull(),
   answer: text("answer").notNull(),
+  /** Aiuti progressivi (vedi questions.hints): approvati insieme al set. */
+  hints: jsonb("hints").$type<string[]>().notNull().default([]),
   /** "ai" | "docente" */
   authorType: text("author_type").notNull().default("ai"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

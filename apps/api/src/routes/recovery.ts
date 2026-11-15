@@ -25,7 +25,7 @@ import {
   recoveryObjectiveIds,
 } from "../lib/recovery";
 import { recordEvidence, masteryForStudents } from "../lib/mastery";
-import { generateRecoveryQuestions, generateFollowupExam } from "../lib/ai";
+import { generateRecoveryQuestions, generateFollowupExam, normalizeHints, MAX_HINTS } from "../lib/ai";
 import { metricsForSet } from "../lib/metrics";
 import { ERROR_TYPE_FOR_PROMPT } from "../lib/recoveryPrompt";
 
@@ -122,6 +122,7 @@ router.post("/recovery-sets/:id/generate", requireTeacher, async (req, res): Pro
           objectiveId: idByCode.get(d.objectiveCode)!,
           question: d.question,
           answer: d.answer,
+          hints: d.hints,
           authorType: "ai",
         })),
       );
@@ -137,6 +138,7 @@ const QuestionBody = z.object({
   objectiveId: z.number().int().positive(),
   question: z.string().trim().min(5).max(600),
   answer: z.string().trim().min(1).max(1200),
+  hints: z.array(z.string().max(300)).max(MAX_HINTS).optional(),
 });
 
 /** Il docente aggiunge una domanda sua. */
@@ -161,7 +163,12 @@ router.post("/recovery-sets/:id/questions", requireTeacher, async (req, res): Pr
     res.status(400).json({ error: "Questo obiettivo non fa parte del recupero" });
     return;
   }
-  await db.insert(recoveryQuestionsTable).values({ recoverySetId: set.id, ...parsed.data, authorType: "docente" });
+  await db.insert(recoveryQuestionsTable).values({
+    recoverySetId: set.id,
+    ...parsed.data,
+    hints: normalizeHints(parsed.data.hints ?? []),
+    authorType: "docente",
+  });
   res.status(201).json(await recoverySetDetail(set));
 });
 
@@ -191,7 +198,11 @@ router.patch("/recovery-questions/:id", requireTeacher, async (req, res): Promis
   }
   await db
     .update(recoveryQuestionsTable)
-    .set({ ...parsed.data, authorType: "docente" })
+    .set({
+      ...parsed.data,
+      ...(parsed.data.hints !== undefined ? { hints: normalizeHints(parsed.data.hints) } : {}),
+      authorType: "docente",
+    })
     .where(eq(recoveryQuestionsTable.id, id!));
   res.json(await recoverySetDetail(found.set));
 });
@@ -404,6 +415,7 @@ router.get("/me/recovery", requireAuth, async (req, res): Promise<void> => {
       objectiveTitle: learningObjectivesTable.title,
       question: recoveryQuestionsTable.question,
       answer: recoveryQuestionsTable.answer,
+      hints: recoveryQuestionsTable.hints,
     })
     .from(recoveryItemsTable)
     .innerJoin(learningObjectivesTable, eq(learningObjectivesTable.id, recoveryItemsTable.objectiveId))

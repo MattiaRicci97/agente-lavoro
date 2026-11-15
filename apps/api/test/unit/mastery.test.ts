@@ -50,7 +50,7 @@ describe("parseRecoveryQuestions", () => {
       ] },
       ["A"],
     );
-    expect(out).toEqual([{ objectiveCode: "A", question: "Risolvi 2x = 4", answer: "x = 2" }]);
+    expect(out).toEqual([{ objectiveCode: "A", question: "Risolvi 2x = 4", answer: "x = 2", hints: [] }]);
   });
 
   it("rifiuta una risposta malformata", () => {
