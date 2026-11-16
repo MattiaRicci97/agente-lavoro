@@ -355,6 +355,8 @@ function diagnosisInstructions(candidates: ObjectiveCandidate[]): string {
 export interface WrittenExamGradeResult {
   grade: number;
   feedback: string;
+  /** Punteggi per criterio, cosi' come li ha scritti il modello (da validare contro la griglia). */
+  rubricScores: unknown;
   /** Vuota se il modello non ha prodotto una diagnosi valida. */
   diagnosis: DiagnosedExercise[];
 }
@@ -370,8 +372,15 @@ export async function gradeWrittenExam(
   subject: string,
   studentAnswer: string,
   candidates: ObjectiveCandidate[] = [],
+  rubric: Array<{ name: string; description: string; weight: number }> = [],
 ): Promise<WrittenExamGradeResult> {
   const label = EXAM_TYPE_LABELS[examType] ?? examType;
+  const rubricBlock = rubric.length
+    ? `\n\nGriglia di valutazione decisa dal docente (usa SOLO questi criteri, con questi nomi esatti):\n` +
+      rubric.map((c) => `- ${c.name} (peso ${c.weight}%)${c.description ? `: ${c.description}` : ""}`).join("\n") +
+      `\nPer ogni criterio dai un punteggio da 1 a 10 e una nota di una frase riferita all'elaborato. ` +
+      `Il voto complessivo deve essere coerente con la media pesata dei criteri.`
+    : "";
 
   const message = await getAnthropic().messages.create({
     model: MODEL,
@@ -385,8 +394,11 @@ export async function gradeWrittenExam(
         role: "user",
         content:
           `Materia: ${subject}\nTraccia:\n${prompt}\n\nElaborato dello studente:\n${studentAnswer}` +
+          rubricBlock +
           diagnosisInstructions(candidates) +
-          `\n\nRispondi con JSON: {"grade": numero_da_1_a_10, "feedback": "...", "diagnosis": [{"exercise": "...", "objectiveCode": "..."|null, "outcome": "corretto|parziale|errato", "errorType": "concettuale|procedurale|distrazione"|null, "evidence": "..."}]}`,
+          `\n\nRispondi con JSON: {"grade": numero_da_1_a_10, "feedback": "...", ` +
+          (rubric.length ? `"rubricScores": [{"criterion": "nome esatto del criterio", "score": numero_da_1_a_10, "note": "..."}], ` : "") +
+          `"diagnosis": [{"exercise": "...", "objectiveCode": "..."|null, "outcome": "corretto|parziale|errato", "errorType": "concettuale|procedurale|distrazione"|null, "evidence": "..."}]}`,
       },
     ],
   });
@@ -401,7 +413,40 @@ export async function gradeWrittenExam(
   if (!graded.success) {
     throw new Error("La correzione dell'AI non e' nel formato atteso. Riprova.");
   }
-  return { ...graded.data, diagnosis: parseDiagnosis(raw.diagnosis, candidates) };
+  return { ...graded.data, rubricScores: raw.rubricScores, diagnosis: parseDiagnosis(raw.diagnosis, candidates) };
+}
+
+/**
+ * Bozza di griglia di valutazione per una verifica: pochi criteri osservabili
+ * con un peso. Al modello va solo la traccia. Il docente rilegge e approva.
+ */
+export async function generateRubric(input: {
+  examType: string;
+  subject: string;
+  gradeLevel: string;
+  prompt: string;
+}): Promise<unknown> {
+  const label = EXAM_TYPE_LABELS[input.examType] ?? input.examType;
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 1500,
+    system:
+      "Sei un docente italiano di scuola superiore che prepara la griglia di valutazione di una verifica scritta. " +
+      `Il formato della verifica e': ${label}. ` +
+      "Scegli da 3 a 5 criteri osservabili nell'elaborato (non giudizi sulla persona), ciascuno con un nome breve, " +
+      "una descrizione di una frase su che cosa si guarda, e un peso in percentuale; i pesi sommano a 100. Rispondi SOLO con JSON valido.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Materia: ${input.subject}\nClasse: ${input.gradeLevel}\n\nTraccia:\n${input.prompt.slice(0, 4000)}\n\n` +
+          `Rispondi con JSON: {"criteria": [{"name": "...", "description": "...", "weight": numero}]}`,
+      },
+    ],
+  });
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("Anthropic non ha restituito testo");
+  return extractJson<{ criteria?: unknown }>(textBlock.text).criteria;
 }
 
 export interface OralTurnResult {

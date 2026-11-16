@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
+import { RubricManager, type RubricCriterion } from "@/components/Rubric";
 import { MaterialObjectives } from "@/components/MaterialObjectives";
 
 const examTypeLabels: Record<string, string> = {
@@ -41,6 +42,8 @@ interface TeacherAssignment {
   instructions: string | null;
   submissionsCount: number;
   toValidateCount: number;
+  rubric: RubricCriterion[] | null;
+  rubricStatus: "bozza" | "approvata" | null;
 }
 
 interface PrintableExam {
@@ -435,7 +438,7 @@ export default function CattedraMaterial() {
                 ) : !assignments?.length ? (
                   <div className="text-sm text-muted-foreground">Nessun compito assegnato.</div>
                 ) : (
-                  <div className="max-h-[280px] space-y-3 overflow-y-auto pr-2">
+                  <div className="max-h-[520px] space-y-3 overflow-y-auto pr-2">
                     {assignments.map((a) => (
                       <div key={a.id} className="border-b pb-3 text-sm last:border-0 last:pb-0">
                         <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -461,6 +464,13 @@ export default function CattedraMaterial() {
                           </Button>
                         </div>
                         <div className="line-clamp-2 text-xs text-muted-foreground">{a.prompt}</div>
+                        <RubricManager
+                          examId={a.id}
+                          rubric={a.rubric}
+                          status={a.rubricStatus}
+                          locked={a.submissionsCount > 0}
+                          onChanged={() => queryClient.invalidateQueries({ queryKey: assignmentsKey })}
+                        />
                         {a.toValidateCount > 0 && (
                           <Link href="/cattedra/validazioni">
                             <span className="mt-1.5 inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary">

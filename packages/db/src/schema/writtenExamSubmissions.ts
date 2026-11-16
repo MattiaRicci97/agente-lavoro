@@ -1,7 +1,7 @@
-import { pgTable, serial, text, timestamp, integer, unique } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, unique, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { writtenExamsTable } from "./writtenExams";
+import { writtenExamsTable, type RubricScore } from "./writtenExams";
 import { teachersTable } from "./teachers";
 
 /**
@@ -26,6 +26,10 @@ export const writtenExamSubmissionsTable = pgTable(
     /** Proposta dell'assistente, mai mostrata da sola allo studente. */
     aiGrade: integer("ai_grade"),
     aiFeedback: text("ai_feedback").notNull().default(""),
+    /** Punteggi per criterio proposti dall'assistente (se il compito ha una griglia). */
+    aiRubricScores: jsonb("ai_rubric_scores").$type<RubricScore[]>(),
+    /** Punteggi per criterio firmati dal docente: gli unici che lo studente vede. */
+    teacherRubricScores: jsonb("teacher_rubric_scores").$type<RubricScore[]>(),
     /** "da_validare" | "validata" */
     validationStatus: text("validation_status").notNull().default("da_validare"),
     teacherGrade: integer("teacher_grade"),

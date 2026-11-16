@@ -24,6 +24,7 @@ import {
 import { DIAGNOSIS_OUTCOMES, DIAGNOSIS_ERROR_TYPES } from "../lib/ai";
 import { syncSignedEvidence } from "../lib/mastery";
 import { attachToRecoveryDraft } from "../lib/recovery";
+import { weightedGrade, mergeTeacherScores } from "../lib/rubric";
 
 /**
  * Dopo la firma: la diagnosi entra nel profilo di padronanza e, se ha lasciato
@@ -68,6 +69,12 @@ const ValidateSchema = z.object({
   feedback: z.string().trim().max(4000).optional().default(""),
   /** Correzioni alla diagnosi: le righe non citate vengono confermate come proposte. */
   diagnosis: z.array(DecisionSchema).max(60).optional().default([]),
+  /** Punteggi per criterio corretti dal docente (solo compiti con griglia). */
+  rubricScores: z
+    .array(z.object({ criterion: z.string().trim().min(1).max(80), score: z.number().int().min(1).max(10) }))
+    .max(12)
+    .optional()
+    .default([]),
 });
 
 /**
@@ -187,6 +194,9 @@ router.get("/validations/pending", requireTeacher, async (req, res): Promise<voi
           createdAt: writtenExamSubmissionsTable.createdAt,
           examType: writtenExamsTable.examType,
           prompt: writtenExamsTable.prompt,
+          rubric: writtenExamsTable.rubric,
+          rubricStatus: writtenExamsTable.rubricStatus,
+          aiRubricScores: writtenExamSubmissionsTable.aiRubricScores,
           materialTitle: materialsTable.title,
           subject: materialsTable.subject,
           classId: writtenExamSubmissionsTable.classId,
@@ -227,8 +237,13 @@ router.get("/validations/pending", requireTeacher, async (req, res): Promise<voi
   }
   const writtenOut = [];
   for (const w of writtenSubmissions) {
+    const { rubric, rubricStatus, aiRubricScores, ...rest } = w;
+    const inForce = rubric && rubricStatus === "approvata" ? rubric : null;
     writtenOut.push({
-      ...w,
+      ...rest,
+      rubric: inForce,
+      rubricScores: inForce ? (aiRubricScores ?? []) : [],
+      rubricSuggestedGrade: inForce ? weightedGrade(inForce, aiRubricScores ?? []) : null,
       diagnosis: writtenDiagnosis.get(w.id) ?? [],
       objectiveOptions: await objectiveOptionsFor(options, {
         classId: w.classId,
@@ -261,7 +276,13 @@ router.post("/written-submissions/:id/validate", requireTeacher, async (req, res
   }
 
   const [row] = await db
-    .select({ id: writtenExamSubmissionsTable.id, materialId: writtenExamsTable.materialId })
+    .select({
+      id: writtenExamSubmissionsTable.id,
+      materialId: writtenExamsTable.materialId,
+      rubric: writtenExamsTable.rubric,
+      rubricStatus: writtenExamsTable.rubricStatus,
+      aiRubricScores: writtenExamSubmissionsTable.aiRubricScores,
+    })
     .from(writtenExamSubmissionsTable)
     .innerJoin(writtenExamsTable, eq(writtenExamsTable.id, writtenExamSubmissionsTable.examId))
     .where(eq(writtenExamSubmissionsTable.id, id));
@@ -298,6 +319,11 @@ router.post("/written-submissions/:id/validate", requireTeacher, async (req, res
       validationStatus: "validata",
       teacherGrade: parsed.data.grade,
       teacherFeedback: parsed.data.feedback,
+      // Con la firma i punteggi per criterio diventano del docente.
+      teacherRubricScores:
+        row.rubric && row.rubricStatus === "approvata"
+          ? mergeTeacherScores(row.rubric, row.aiRubricScores ?? [], parsed.data.rubricScores)
+          : null,
       validatedByTeacherId: req.teacher!.id,
       validatedAt: new Date(),
     })

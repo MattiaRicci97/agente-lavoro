@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, ScanLine, Mic, Sparkles, Stamp, PartyPopper, PenLine } from "lucide-react";
+import { CheckCircle2, ScanLine, Mic, Sparkles, Stamp, PartyPopper, PenLine, ListChecks } from "lucide-react";
+import { weightedGrade, type RubricCriterion, type RubricScore } from "@/components/Rubric";
 import { DiagnosisEditor } from "@/components/DiagnosisEditor";
 import type { DiagnosisRow, DiagnosisDecision, ObjectiveRef } from "@/lib/diagnosis";
 
@@ -56,6 +57,9 @@ interface PendingWritten {
   createdAt: string;
   diagnosis: DiagnosisRow[];
   objectiveOptions: ObjectiveRef[];
+  rubric: RubricCriterion[] | null;
+  rubricScores: RubricScore[];
+  rubricSuggestedGrade: number | null;
 }
 
 interface PendingResponse {
@@ -73,22 +77,40 @@ function SignBox({
   objectiveOptions,
   onSign,
   isPending,
+  rubric,
+  rubricScores,
 }: {
   proposedGrade: number | null;
   proposedFeedback: string;
   /** Se assente, la correzione non ha una diagnosi (es. interrogazioni). */
   diagnosis?: DiagnosisRow[];
   objectiveOptions?: ObjectiveRef[];
-  onSign: (grade: number | null, feedback: string, decisions: DiagnosisDecision[]) => void;
+  onSign: (
+    grade: number | null,
+    feedback: string,
+    decisions: DiagnosisDecision[],
+    rubricScores: Array<{ criterion: string; score: number }>,
+  ) => void;
   isPending: boolean;
+  /** Griglia approvata del compito, con i punteggi proposti dall'assistente. */
+  rubric?: RubricCriterion[] | null;
+  rubricScores?: RubricScore[];
 }) {
+  const proposedScores = Object.fromEntries((rubricScores ?? []).map((s) => [s.criterion, String(s.score)]));
+  const [scores, setScores] = useState<Record<string, string>>(proposedScores);
+  const numericScores = Object.fromEntries(
+    (rubric ?? []).map((c) => [c.name, scores[c.name]?.trim() ? Number(scores[c.name]) : null]),
+  );
+  const suggested = rubric?.length ? weightedGrade(rubric, numericScores) : null;
+  const scoresTouched = (rubric ?? []).some((c) => (scores[c.name] ?? "") !== (proposedScores[c.name] ?? ""));
   const [grade, setGrade] = useState<string>(proposedGrade !== null ? String(proposedGrade) : "");
   const [feedback, setFeedback] = useState<string>(proposedFeedback);
   const [decisions, setDecisions] = useState<DiagnosisDecision[]>([]);
   const touched =
     grade !== (proposedGrade !== null ? String(proposedGrade) : "") ||
     feedback !== proposedFeedback ||
-    decisions.length > 0;
+    decisions.length > 0 ||
+    scoresTouched;
 
   return (
     <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-3">
@@ -100,6 +122,52 @@ function SignBox({
 
       {diagnosis && (
         <DiagnosisEditor rows={diagnosis} options={objectiveOptions ?? []} onChange={setDecisions} />
+      )}
+
+      {rubric && rubric.length > 0 && (
+        <div className="space-y-2 rounded-lg border bg-card p-3">
+          <div className="flex items-center gap-2 text-xs font-medium">
+            <ListChecks className="h-3.5 w-3.5" />
+            La tua griglia: punteggi per criterio
+            {suggested !== null && (
+              <span className="ml-auto font-normal text-muted-foreground">
+                media pesata {String(suggested).replace(".", ",")}
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto px-1.5 py-0 text-xs"
+                  onClick={() => setGrade(String(Math.min(10, Math.max(1, Math.round(suggested)))))}
+                >
+                  usa come voto
+                </Button>
+              </span>
+            )}
+          </div>
+          {rubric.map((c) => {
+            const note = rubricScores?.find((s) => s.criterion === c.name)?.note;
+            return (
+              <div key={c.name} className="flex items-start gap-3 text-sm">
+                <div className="min-w-0 flex-1">
+                  <div>
+                    {c.name} <span className="text-muted-foreground">· {c.weight}%</span>
+                  </div>
+                  {note && <div className="text-xs text-muted-foreground">{note}</div>}
+                </div>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  className="w-16"
+                  aria-label={`Punteggio: ${c.name}`}
+                  value={scores[c.name] ?? ""}
+                  placeholder="—"
+                  onChange={(e) => setScores({ ...scores, [c.name]: e.target.value })}
+                />
+              </div>
+            );
+          })}
+        </div>
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -129,7 +197,16 @@ function SignBox({
           Puoi confermare così com'è o correggere: allo studente arriva la <strong>tua</strong> versione.
         </p>
         <Button
-          onClick={() => onSign(grade.trim() === "" ? null : Number(grade), feedback, decisions)}
+          onClick={() =>
+            onSign(
+              grade.trim() === "" ? null : Number(grade),
+              feedback,
+              decisions,
+              (rubric ?? [])
+                .map((c) => ({ criterion: c.name, score: Math.round(Number(scores[c.name])) }))
+                .filter((s) => s.score >= 1 && s.score <= 10),
+            )
+          }
           disabled={isPending}
           className="w-full shrink-0 sm:w-auto"
         >
@@ -157,12 +234,14 @@ export default function CattedraValidazioni() {
       grade,
       feedback,
       diagnosis,
+      rubricScores,
     }: {
       kind: "photo" | "oral" | "written";
       id: number;
       grade: number | null;
       feedback: string;
       diagnosis?: DiagnosisDecision[];
+      rubricScores?: Array<{ criterion: string; score: number }>;
     }) => {
       const path =
         kind === "photo"
@@ -173,7 +252,11 @@ export default function CattedraValidazioni() {
       return customFetch(path, {
         method: "POST",
         responseType: "json",
-        body: JSON.stringify(kind === "oral" ? { grade, feedback } : { grade, feedback, diagnosis: diagnosis ?? [] }),
+        body: JSON.stringify(
+          kind === "oral"
+            ? { grade, feedback }
+            : { grade, feedback, diagnosis: diagnosis ?? [], ...(kind === "written" ? { rubricScores: rubricScores ?? [] } : {}) },
+        ),
       });
     },
     onSuccess: () => {
@@ -307,7 +390,11 @@ export default function CattedraValidazioni() {
                     diagnosis={w.diagnosis}
                     objectiveOptions={w.objectiveOptions}
                     isPending={sign.isPending}
-                    onSign={(grade, feedback, diagnosis) => sign.mutate({ kind: "written", id: w.id, grade, feedback, diagnosis })}
+                    rubric={w.rubric}
+                    rubricScores={w.rubricScores}
+                    onSign={(grade, feedback, diagnosis, rubricScores) =>
+                      sign.mutate({ kind: "written", id: w.id, grade, feedback, diagnosis, rubricScores })
+                    }
                   />
                 </CardContent>
               </Card>

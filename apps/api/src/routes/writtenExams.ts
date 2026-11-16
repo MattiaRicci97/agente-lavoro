@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, desc, and, inArray, count } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
@@ -10,7 +10,8 @@ import {
   materialClassesTable,
 } from "@sillabo/db";
 import { GenerateWrittenExamParams } from "@sillabo/api-zod";
-import { generateWrittenExamPrompt, gradeWrittenExam } from "../lib/ai";
+import { generateWrittenExamPrompt, gradeWrittenExam, generateRubric } from "../lib/ai";
+import { parseRubric, parseRubricScores, weightedGrade, RubricError } from "../lib/rubric";
 import { requireAuth, requireTeacher, findApprovedStudentForMaterial } from "../middlewares/auth";
 import { teacherCanManageMaterial } from "../lib/materialAccess";
 import { announceToClasses } from "../lib/classFeed";
@@ -35,6 +36,44 @@ const AssignSchema = z.object({
 const SubmitSchema = z.object({
   studentAnswer: z.string().trim().min(1).max(20000),
 });
+
+const RubricBody = z.object({
+  criteria: z.array(z.unknown()).max(12),
+  /** true = il docente la approva: da qui la vedono gli studenti. */
+  approved: z.boolean().default(false),
+});
+
+/** La griglia come la vede il docente (anche in bozza). */
+function teacherRubric(exam: typeof writtenExamsTable.$inferSelect) {
+  return { rubric: exam.rubric ?? null, rubricStatus: exam.rubric ? exam.rubricStatus : null };
+}
+
+/** La griglia in vigore: solo quella approvata dal docente. */
+function approvedRubric(exam: typeof writtenExamsTable.$inferSelect) {
+  return exam.rubric && exam.rubricStatus === "approvata" ? exam.rubric : null;
+}
+
+/**
+ * Il compito su cui il docente puo' ancora cambiare la griglia: suo, e senza
+ * consegne (cambiarla dopo renderebbe diverse le correzioni dei compagni).
+ */
+async function examWithEditableRubric(req: Request, res: Response) {
+  const id = Number(req.params.id);
+  const [exam] = Number.isInteger(id) ? await db.select().from(writtenExamsTable).where(eq(writtenExamsTable.id, id)) : [];
+  if (!exam || !(await teacherCanManageMaterial(req.teacher!.id, exam.materialId))) {
+    res.status(404).json({ error: "Compito non trovato" });
+    return null;
+  }
+  const [{ submissions }] = await db
+    .select({ submissions: count() })
+    .from(writtenExamSubmissionsTable)
+    .where(eq(writtenExamSubmissionsTable.examId, exam.id));
+  if (submissions > 0) {
+    res.status(409).json({ error: "Ci sono gia' consegne: la griglia non si puo' piu' cambiare." });
+    return null;
+  }
+  return exam;
+}
 
 /** Traccia del compito, senza i dati di consegna di nessuno. */
 function assignmentView(exam: typeof writtenExamsTable.$inferSelect) {
@@ -110,6 +149,7 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
     res.json(
       exams.map((e) => ({
         ...assignmentView(e),
+        ...teacherRubric(e),
         submissionsCount: byExam.get(e.id) ?? 0,
         toValidateCount: pendingByExam.get(e.id) ?? 0,
       })),
@@ -154,6 +194,8 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
       const sub = mineByExam.get(e.id);
       return {
         ...assignmentView(e),
+        // Lo studente conosce i criteri prima di svolgere il compito.
+        rubric: approvedRubric(e),
         isFollowup: e.recoverySetId !== null,
         mySubmission: sub
           ? {
@@ -163,6 +205,7 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
               // Prima del visto lo studente non riceve nessun voto.
               grade: sub.validationStatus === "validata" ? sub.teacherGrade : null,
               feedback: sub.validationStatus === "validata" ? sub.teacherFeedback : null,
+              rubricScores: sub.validationStatus === "validata" ? (sub.teacherRubricScores ?? []) : [],
               diagnosis: (diagnosis.get(sub.id) ?? []).map((d) => ({
                 exercise: d.exercise,
                 objective: d.teacher?.objective ?? null,
@@ -249,7 +292,67 @@ router.post("/materials/:id/written-exams", requireTeacher, async (req, res): Pr
     writtenExamId: exam.id,
   });
 
-  res.status(201).json({ ...assignmentView(exam), submissionsCount: 0, toValidateCount: 0 });
+  res.status(201).json({ ...assignmentView(exam), ...teacherRubric(exam), submissionsCount: 0, toValidateCount: 0 });
+});
+
+/** L'assistente propone una griglia: resta in bozza finche' il docente non la approva. */
+router.post("/written-exams/:id/rubric-draft", requireTeacher, async (req, res): Promise<void> => {
+  const exam = await examWithEditableRubric(req, res);
+  if (!exam) return;
+  const [material] = await db.select().from(materialsTable).where(eq(materialsTable.id, exam.materialId));
+  try {
+    const rubric = parseRubric(
+      await generateRubric({
+        examType: exam.examType,
+        subject: material?.subject ?? "",
+        gradeLevel: material?.gradeLevel ?? "",
+        prompt: exam.prompt,
+      }),
+    );
+    const [updated] = await db
+      .update(writtenExamsTable)
+      .set({ rubric, rubricStatus: "bozza" })
+      .where(eq(writtenExamsTable.id, exam.id))
+      .returning();
+    res.json(teacherRubric(updated));
+  } catch (err) {
+    req.log.error({ err }, "Generazione griglia fallita");
+    res.status(502).json({ error: "L'assistente non e' riuscito a proporre una griglia. Riprova, o scrivila tu." });
+  }
+});
+
+/** Il docente salva la sua griglia, e se vuole la approva. */
+router.put("/written-exams/:id/rubric", requireTeacher, async (req, res): Promise<void> => {
+  // Prima si controlla che il compito sia suo: un estraneo non deve capire
+  // nemmeno se la sua richiesta era ben formata.
+  const exam = await examWithEditableRubric(req, res);
+  if (!exam) return;
+  const parsed = RubricBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  let rubric;
+  try {
+    rubric = parseRubric(parsed.data.criteria);
+  } catch (err) {
+    if (!(err instanceof RubricError)) throw err;
+    res.status(400).json({ error: err.message });
+    return;
+  }
+  const [updated] = await db
+    .update(writtenExamsTable)
+    .set({ rubric, rubricStatus: parsed.data.approved ? "approvata" : "bozza" })
+    .where(eq(writtenExamsTable.id, exam.id))
+    .returning();
+  res.json(teacherRubric(updated));
+});
+
+router.delete("/written-exams/:id/rubric", requireTeacher, async (req, res): Promise<void> => {
+  const exam = await examWithEditableRubric(req, res);
+  if (!exam) return;
+  await db.update(writtenExamsTable).set({ rubric: null, rubricStatus: "bozza" }).where(eq(writtenExamsTable.id, exam.id));
+  res.json({ rubric: null, rubricStatus: null });
 });
 
 /** Il docente ritira un compito assegnato (e le relative consegne). */
@@ -343,13 +446,16 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
     materialId: material.id,
     priorityObjectiveIds: exam.recoverySetId !== null ? await recoveryObjectiveIds(exam.recoverySetId) : undefined,
   });
-  const { grade, feedback, diagnosis } = await gradeWrittenExam(
+  const rubric = approvedRubric(exam);
+  const { grade, feedback, diagnosis, rubricScores } = await gradeWrittenExam(
     exam.examType,
     exam.prompt,
     material.subject,
     parsed.data.studentAnswer,
     toCandidates(candidates),
+    rubric ?? [],
   );
+  const aiRubricScores = rubric ? parseRubricScores(rubricScores, rubric) : null;
 
   const [created] = await db
     .insert(writtenExamSubmissionsTable)
@@ -361,6 +467,7 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
       answer: parsed.data.studentAnswer,
       aiGrade: typeof grade === "number" ? Math.round(grade) : null,
       aiFeedback: feedback ?? "",
+      aiRubricScores,
     })
     .returning();
 

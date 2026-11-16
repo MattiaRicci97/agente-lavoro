@@ -1,8 +1,22 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { materialsTable } from "./materials";
 import { teachersTable } from "./teachers";
+
+/** Un criterio della griglia di valutazione: il peso e' in percentuale. */
+export interface RubricCriterion {
+  name: string;
+  description: string;
+  weight: number;
+}
+
+/** Il punteggio (1-10) su un criterio, con una nota breve. */
+export interface RubricScore {
+  criterion: string;
+  score: number;
+  note: string;
+}
 
 /**
  * Il compito assegnato dal docente alla classe: una sola traccia, valida per
@@ -33,6 +47,13 @@ export const writtenExamsTable = pgTable("written_exams", {
    * chiude. La vedono solo gli studenti che hanno ricevuto quel recupero.
    */
   recoverySetId: integer("recovery_set_id"),
+  /** Griglia di valutazione (null = il compito non ne ha una). */
+  rubric: jsonb("rubric").$type<RubricCriterion[]>(),
+  /**
+   * "bozza" | "approvata". Solo la griglia approvata dal docente arriva agli
+   * studenti e viene usata nella correzione.
+   */
+  rubricStatus: text("rubric_status").notNull().default("bozza"),
   studentName: text("student_name"),
   studentAnswer: text("student_answer"),
   grade: integer("grade"),

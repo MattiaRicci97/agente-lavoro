@@ -1,4 +1,5 @@
 import { DiagnosisSummary } from "@/components/DiagnosisSummary";
+import { RubricTable, type RubricCriterion, type RubricScore } from "@/components/Rubric";
 import type { StudentDiagnosisRow } from "@/lib/diagnosis";
 import { useState } from "react";
 import { useParams, Link } from "wouter";
@@ -26,6 +27,7 @@ interface MySubmission {
   grade: number | null;
   feedback: string | null;
   diagnosis?: StudentDiagnosisRow[];
+  rubricScores?: RubricScore[];
   createdAt: string;
 }
 
@@ -38,6 +40,7 @@ interface Assignment {
   instructions: string | null;
   createdAt: string;
   isFollowup?: boolean;
+  rubric?: RubricCriterion[] | null;
   mySubmission: MySubmission | null;
 }
 
@@ -240,9 +243,30 @@ export default function StudioScritto() {
               )}
             </Card>
 
+            {selected.rubric && selected.rubric.length > 0 && !selected.mySubmission?.rubricScores?.length && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">
+                  {selected.mySubmission?.rubricScores?.length
+                    ? "Come è andata, criterio per criterio"
+                    : "Come verrà valutato"}
+                </h3>
+                <RubricTable rubric={selected.rubric} scores={selected.mySubmission?.rubricScores} />
+              </div>
+            )}
+
             {selected.mySubmission ? (
               <>
                 <SubmissionOutcome submission={selected.mySubmission} />
+                {selected.rubric && selected.rubric.length > 0 && !!selected.mySubmission.rubricScores?.length && (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">
+                      {selected.mySubmission?.rubricScores?.length
+                        ? "Come è andata, criterio per criterio"
+                        : "Come verrà valutato"}
+                    </h3>
+                    <RubricTable rubric={selected.rubric} scores={selected.mySubmission?.rubricScores} />
+                  </div>
+                )}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Quello che hai consegnato</CardTitle>
