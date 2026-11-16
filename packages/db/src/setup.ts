@@ -15,7 +15,7 @@ import { config } from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { OBJECTIVES_MATEMATICA_BIENNIO } from "./seed/objectivesMatematicaBiennio";
+import { OBJECTIVE_CATALOG, validateObjectiveCatalog } from "./seed/objectives";
 
 // Carica il file .env dalla radice del repo (dove l'utente mette le chiavi).
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -527,8 +527,12 @@ async function main() {
     //    Upsert per codice: il titolo e la descrizione vengono aggiornati solo
     //    finche' l'obiettivo e' ancora una bozza. Quello che un docente ha
     //    riletto e confermato resta com'e'.
+    const catalogProblems = validateObjectiveCatalog(OBJECTIVE_CATALOG);
+    if (catalogProblems.length) {
+      throw new Error(`Seed obiettivi non coerente:\n- ${catalogProblems.join("\n- ")}`);
+    }
     let seededObjectives = 0;
-    for (const group of OBJECTIVES_MATEMATICA_BIENNIO) {
+    for (const group of OBJECTIVE_CATALOG) {
       const idByCode = new Map<string, number>();
       for (const [ord, o] of group.objectives.entries()) {
         const { rows } = await client.query<{ id: number }>(

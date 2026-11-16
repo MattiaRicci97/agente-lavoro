@@ -196,8 +196,27 @@ export default function CattedraNuovo() {
                     <FormItem>
                       <FormLabel>Materia</FormLabel>
                       <FormControl>
-                        <Input placeholder="es. Storia" {...field} />
+                        <Input placeholder="es. Storia" list="subject-suggestions" {...field} />
                       </FormControl>
+                      {/* Nomi suggeriti: usare lo stesso nome della mappa degli obiettivi fa funzionare diagnosi e recupero. */}
+                      <datalist id="subject-suggestions">
+                        {[
+                          "Matematica",
+                          "Italiano",
+                          "Inglese",
+                          "Fisica",
+                          "Storia",
+                          "Geografia",
+                          "Scienze",
+                          "Latino",
+                          "Filosofia",
+                          "Informatica",
+                          "Diritto ed economia",
+                          "Storia dell'arte",
+                        ].map((name) => (
+                          <option key={name} value={name} />
+                        ))}
+                      </datalist>
                       <FormMessage />
                     </FormItem>
                   )}
