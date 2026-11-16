@@ -3,6 +3,7 @@ export const EXAM_TYPE_LABELS: Record<string, string> = {
   tema: "Tema",
   versione: "Versione",
   problema: "Problema",
+  esposizione: "Esposizione a voce",
   prima_prova_a: "Simulazione prima prova · Tip. A",
   prima_prova_b: "Simulazione prima prova · Tip. B",
   prima_prova_c: "Simulazione prima prova · Tip. C",
@@ -14,7 +15,14 @@ export const PRIMA_PROVA_TYPES = [
   { type: "prima_prova_c", short: "Tip. C", hint: "Riflessione su temi di attualità" },
 ] as const;
 
-export type AssignableExamType = "tema" | "versione" | "problema" | (typeof PRIMA_PROVA_TYPES)[number]["type"];
+export type AssignableExamType = "tema" | "versione" | "problema" | "esposizione" | (typeof PRIMA_PROVA_TYPES)[number]["type"];
+
+/** Le consegne che lo studente registra a voce invece di scrivere. */
+export function isSpokenAssignment(examType: string): boolean {
+  return examType === "esposizione";
+}
+
+export const MAX_AUDIO_SECONDS = 180;
 
 export function isMaturitaSimulation(examType: string): boolean {
   return examType.startsWith("prima_prova_");

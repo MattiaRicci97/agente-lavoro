@@ -4,17 +4,29 @@ import type { RubricCriterion } from "@sillabo/db";
  * I formati di compito scritto. Ai tre di sempre si aggiungono le simulazioni
  * della prima prova dell'esame di Stato, nelle tre tipologie ministeriali.
  */
-export const EXAM_TYPES = ["tema", "versione", "problema", "prima_prova_a", "prima_prova_b", "prima_prova_c"] as const;
+export const EXAM_TYPES = ["tema", "versione", "problema", "esposizione", "prima_prova_a", "prima_prova_b", "prima_prova_c"] as const;
 export type ExamType = (typeof EXAM_TYPES)[number];
 
 export const EXAM_TYPE_NAMES: Record<string, string> = {
   tema: "Tema",
   versione: "Versione",
   problema: "Problema",
+  esposizione: "Esposizione a voce",
   prima_prova_a: "Simulazione prima prova, tipologia A",
   prima_prova_b: "Simulazione prima prova, tipologia B",
   prima_prova_c: "Simulazione prima prova, tipologia C",
 };
+
+/** Le consegne che lo studente registra a voce invece di scrivere. */
+export function isSpokenAssignment(examType: string): boolean {
+  return examType === "esposizione";
+}
+
+/** Durata massima di una registrazione, in secondi. */
+export const MAX_AUDIO_SECONDS = 180;
+
+/** Testo che occupa il campo della risposta quando la consegna e' solo audio. */
+export const SPOKEN_ANSWER_PLACEHOLDER = "(consegna registrata a voce)";
 
 export function isMaturitaSimulation(examType: string): boolean {
   return examType.startsWith("prima_prova_");

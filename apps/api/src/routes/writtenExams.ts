@@ -11,7 +11,15 @@ import {
 } from "@sillabo/db";
 import { GenerateWrittenExamParams } from "@sillabo/api-zod";
 import { generateWrittenExamPrompt, gradeWrittenExam, generateRubric } from "../lib/ai";
-import { EXAM_TYPES, EXAM_TYPE_NAMES, isMaturitaSimulation, PRIMA_PROVA_RUBRICS } from "../lib/examTypes";
+import {
+  EXAM_TYPES,
+  EXAM_TYPE_NAMES,
+  isMaturitaSimulation,
+  isSpokenAssignment,
+  MAX_AUDIO_SECONDS,
+  PRIMA_PROVA_RUBRICS,
+  SPOKEN_ANSWER_PLACEHOLDER,
+} from "../lib/examTypes";
 import { parseRubric, parseRubricScores, weightedGrade, RubricError } from "../lib/rubric";
 import { requireAuth, requireTeacher, findApprovedStudentForMaterial } from "../middlewares/auth";
 import { teacherCanManageMaterial } from "../lib/materialAccess";
@@ -35,7 +43,13 @@ const AssignSchema = z.object({
 });
 
 const SubmitSchema = z.object({
-  studentAnswer: z.string().trim().min(1).max(20000),
+  studentAnswer: z.string().trim().max(20000).default(""),
+  /** Solo per le esposizioni a voce: il file caricato dallo studente. */
+  audioObjectPath: z
+    .string()
+    .regex(/^\/objects\/uploads\/[0-9a-f-]{36}\/[\w.\-]{1,120}$/)
+    .optional(),
+  audioSeconds: z.number().int().min(1).max(MAX_AUDIO_SECONDS + 5).optional(),
 });
 
 const RubricBody = z.object({
@@ -206,6 +220,8 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
           ? {
               id: sub.id,
               answer: sub.answer,
+              audioObjectPath: sub.audioObjectPath,
+              audioSeconds: sub.audioSeconds,
               status: sub.validationStatus,
               // Prima del visto lo studente non riceve nessun voto.
               grade: sub.validationStatus === "validata" ? sub.teacherGrade : null,
@@ -464,6 +480,46 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
     );
   if (existing) {
     res.status(409).json({ error: "Hai già consegnato questo compito." });
+    return;
+  }
+
+  // Un'esposizione si consegna a voce; gli altri compiti per iscritto.
+  const spoken = isSpokenAssignment(exam.examType);
+  if (spoken && !parsed.data.audioObjectPath) {
+    res.status(400).json({ error: "Registra la tua esposizione prima di consegnare." });
+    return;
+  }
+  if (!spoken && (parsed.data.audioObjectPath || !parsed.data.studentAnswer)) {
+    res.status(400).json({ error: "Scrivi il tuo elaborato prima di consegnare." });
+    return;
+  }
+  if (spoken) {
+    // L'assistente non ascolta le registrazioni: nessuna proposta, nessuna
+    // diagnosi. La valutazione e' tutta del docente, che ascolta.
+    const [created] = await db
+      .insert(writtenExamSubmissionsTable)
+      .values({
+        examId,
+        authUserId: req.authUserId!,
+        studentName: student.name,
+        classId: student.classId,
+        answer: parsed.data.studentAnswer || SPOKEN_ANSWER_PLACEHOLDER,
+        audioObjectPath: parsed.data.audioObjectPath!,
+        audioSeconds: parsed.data.audioSeconds ?? null,
+        aiGrade: null,
+        aiFeedback: "",
+      })
+      .returning();
+    res.status(201).json({
+      id: created.id,
+      examId: created.examId,
+      answer: created.answer,
+      audioObjectPath: created.audioObjectPath,
+      status: created.validationStatus,
+      grade: null,
+      feedback: null,
+      createdAt: created.createdAt,
+    });
     return;
   }
 

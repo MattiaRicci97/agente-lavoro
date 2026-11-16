@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, ScanLine, Mic, Sparkles, Stamp, PartyPopper, PenLine, ListChecks } from "lucide-react";
+import { ProtectedAudio } from "@/components/ProtectedAudio";
 import { EXAM_TYPE_LABELS, isMaturitaSimulation, toTwentieths } from "@/lib/examTypes";
 import { weightedGrade, type RubricCriterion, type RubricScore } from "@/components/Rubric";
 import { DiagnosisEditor } from "@/components/DiagnosisEditor";
@@ -49,6 +50,8 @@ interface PendingWritten {
   id: number;
   studentName: string;
   answer: string;
+  audioObjectPath: string | null;
+  audioSeconds: number | null;
   grade: number | null;
   feedback: string;
   examType: string;
@@ -81,6 +84,7 @@ function SignBox({
   rubric,
   rubricScores,
   twentieths,
+  requireGrade,
 }: {
   proposedGrade: number | null;
   proposedFeedback: string;
@@ -99,6 +103,8 @@ function SignBox({
   rubricScores?: RubricScore[];
   /** true per le simulazioni d'esame: accanto al voto compare l'equivalente in ventesimi. */
   twentieths?: boolean;
+  /** true quando non c'e' una proposta da confermare (registrazioni): serve il voto del docente. */
+  requireGrade?: boolean;
 }) {
   const proposedScores = Object.fromEntries((rubricScores ?? []).map((s) => [s.criterion, String(s.score)]));
   const [scores, setScores] = useState<Record<string, string>>(proposedScores);
@@ -201,7 +207,13 @@ function SignBox({
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
-          Puoi confermare così com'è o correggere: allo studente arriva la <strong>tua</strong> versione.
+          {requireGrade ? (
+            <>Ascolta la registrazione, poi scrivi voto e commento: allo studente arrivano i tuoi.</>
+          ) : (
+            <>
+              Puoi confermare così com'è o correggere: allo studente arriva la <strong>tua</strong> versione.
+            </>
+          )}
         </p>
         <Button
           onClick={() =>
@@ -214,11 +226,11 @@ function SignBox({
                 .filter((s) => s.score >= 1 && s.score <= 10),
             )
           }
-          disabled={isPending}
+          disabled={isPending || (!!requireGrade && grade.trim() === "")}
           className="w-full shrink-0 sm:w-auto"
         >
           <CheckCircle2 className="mr-2 h-4 w-4" />
-          {touched ? "Correggi e firma" : "Conferma e firma"}
+          {requireGrade ? "Firma la valutazione" : touched ? "Correggi e firma" : "Conferma e firma"}
         </Button>
       </div>
     </div>
@@ -375,31 +387,46 @@ export default function CattedraValidazioni() {
                     <span className="font-medium text-foreground">Traccia:</span> {w.prompt}
                   </p>
 
-                  <div className="rounded-lg border bg-card p-4">
-                    <div className="mb-2 text-sm font-medium">L'elaborato di {w.studentName}</div>
-                    <p className="max-h-72 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed">
-                      {w.answer}
-                    </p>
-                  </div>
+                  {w.audioObjectPath ? (
+                    <>
+                      <div className="rounded-lg border bg-card p-4 space-y-2">
+                        <div className="text-sm font-medium">L'esposizione di {w.studentName}</div>
+                        <ProtectedAudio objectPath={w.audioObjectPath} seconds={w.audioSeconds} />
+                      </div>
+                      <p className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
+                        L'assistente non ascolta le registrazioni: qui non c'è nessuna proposta, la valutazione è tutta tua.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="rounded-lg border bg-card p-4">
+                        <div className="mb-2 text-sm font-medium">L'elaborato di {w.studentName}</div>
+                        <p className="max-h-72 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed">
+                          {w.answer}
+                        </p>
+                      </div>
 
-                  <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <Sparkles className="h-4 w-4" />
-                      Proposta dell'assistente
-                      {w.grade !== null && <Badge variant="outline" className="ml-auto">{w.grade}/10</Badge>}
-                    </div>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{w.feedback}</p>
-                  </div>
+                      <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                          <Sparkles className="h-4 w-4" />
+                          Proposta dell'assistente
+                          {w.grade !== null && <Badge variant="outline" className="ml-auto">{w.grade}/10</Badge>}
+                        </div>
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{w.feedback}</p>
+                      </div>
+                    </>
+                  )}
 
                   <SignBox
                     proposedGrade={w.grade}
                     proposedFeedback={w.feedback}
-                    diagnosis={w.diagnosis}
+                    diagnosis={w.audioObjectPath ? undefined : w.diagnosis}
                     objectiveOptions={w.objectiveOptions}
                     isPending={sign.isPending}
                     rubric={w.rubric}
                     rubricScores={w.rubricScores}
                     twentieths={isMaturitaSimulation(w.examType)}
+                    requireGrade={!!w.audioObjectPath}
                     onSign={(grade, feedback, diagnosis, rubricScores) =>
                       sign.mutate({ kind: "written", id: w.id, grade, feedback, diagnosis, rubricScores })
                     }

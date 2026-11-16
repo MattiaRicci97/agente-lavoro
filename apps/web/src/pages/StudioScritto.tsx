@@ -1,5 +1,8 @@
 import { DiagnosisSummary } from "@/components/DiagnosisSummary";
-import { EXAM_TYPE_LABELS, isMaturitaSimulation, toTwentieths } from "@/lib/examTypes";
+import { EXAM_TYPE_LABELS, isMaturitaSimulation, isSpokenAssignment, toTwentieths } from "@/lib/examTypes";
+import { AudioRecorder, type Recording } from "@/components/AudioRecorder";
+import { ProtectedAudio } from "@/components/ProtectedAudio";
+import { useUpload } from "@/hooks/use-upload";
 import { RubricTable, type RubricCriterion, type RubricScore } from "@/components/Rubric";
 import type { StudentDiagnosisRow } from "@/lib/diagnosis";
 import { useState } from "react";
@@ -23,6 +26,8 @@ interface MySubmission {
   status: "da_validare" | "validata";
   grade: number | null;
   feedback: string | null;
+  audioObjectPath?: string | null;
+  audioSeconds?: number | null;
   diagnosis?: StudentDiagnosisRow[];
   rubricScores?: RubricScore[];
   createdAt: string;
@@ -108,6 +113,8 @@ export default function StudioScritto() {
 
   const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
   const [answer, setAnswer] = useState("");
+  const [recording, setRecording] = useState<Recording | null>(null);
+  const { uploadFile, isUploading } = useUpload();
 
   const { data: material, isLoading: materialLoading } = useGetMaterial(materialId, {
     query: { enabled: !!materialId, queryKey: getGetMaterialQueryKey(materialId) },
@@ -122,14 +129,23 @@ export default function StudioScritto() {
   });
 
   const submit = useMutation({
-    mutationFn: (examId: number) =>
-      customFetch(`/api/written-exams/${examId}/submit`, {
+    mutationFn: async (examId: number) => {
+      // Un'esposizione a voce: prima si carica la registrazione, poi si consegna.
+      let audio: { audioObjectPath: string; audioSeconds: number } | null = null;
+      if (recording) {
+        const uploaded = await uploadFile(recording.file);
+        if (!uploaded) throw { data: { error: "Caricamento della registrazione non riuscito. Controlla la connessione e riprova." } };
+        audio = { audioObjectPath: uploaded.objectPath, audioSeconds: recording.seconds };
+      }
+      return customFetch(`/api/written-exams/${examId}/submit`, {
         method: "POST",
         responseType: "json",
-        body: JSON.stringify({ studentAnswer: answer }),
-      }),
+        body: JSON.stringify({ studentAnswer: answer, ...(audio ?? {}) }),
+      });
+    },
     onSuccess: () => {
       setAnswer("");
+      setRecording(null);
       queryClient.invalidateQueries({ queryKey: assignmentsKey });
       toast({
         title: "Compito consegnato",
@@ -273,9 +289,15 @@ export default function StudioScritto() {
                   <CardHeader>
                     <CardTitle className="text-base">Quello che hai consegnato</CardTitle>
                   </CardHeader>
-                  <CardContent className="whitespace-pre-wrap text-sm text-muted-foreground">
-                    {selected.mySubmission.answer}
-                  </CardContent>
+                  {selected.mySubmission.audioObjectPath ? (
+                    <CardContent>
+                      <ProtectedAudio objectPath={selected.mySubmission.audioObjectPath} seconds={selected.mySubmission.audioSeconds} />
+                    </CardContent>
+                  ) : (
+                    <CardContent className="whitespace-pre-wrap text-sm text-muted-foreground">
+                      {selected.mySubmission.answer}
+                    </CardContent>
+                  )}
                 </Card>
                 <Button variant="outline" onClick={() => setSelectedExamId(null)}>
                   Torna ai compiti
@@ -283,17 +305,26 @@ export default function StudioScritto() {
               </>
             ) : (
               <>
-                <div className="space-y-2">
-                  <Textarea
-                    placeholder="Scrivi qui il tuo svolgimento..."
-                    className="min-h-[400px] p-4 text-base"
-                    value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Si consegna una volta sola: rileggi prima di inviare.
-                  </p>
-                </div>
+                {isSpokenAssignment(selected.examType) ? (
+                  <div className="space-y-2">
+                    <AudioRecorder value={recording} onChange={setRecording} />
+                    <p className="text-xs text-muted-foreground">
+                      Si consegna una volta sola. La registrazione la ascolta il tuo docente, che dà il voto: nessun altro la sente.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Textarea
+                      placeholder="Scrivi qui il tuo svolgimento..."
+                      className="min-h-[400px] p-4 text-base"
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Si consegna una volta sola: rileggi prima di inviare.
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex justify-between border-t pt-4">
                   <Button variant="ghost" onClick={() => setSelectedExamId(null)}>
@@ -303,17 +334,18 @@ export default function StudioScritto() {
                     size="lg"
                     className="bg-secondary px-8 text-secondary-foreground hover:bg-secondary/90"
                     onClick={() => {
-                      if (!answer.trim()) {
+                      const spoken = isSpokenAssignment(selected.examType);
+                      if (spoken ? !recording : !answer.trim()) {
                         toast({
                           title: "Attenzione",
-                          description: "Scrivi il tuo elaborato prima di consegnare.",
+                          description: spoken ? "Registra la tua esposizione prima di consegnare." : "Scrivi il tuo elaborato prima di consegnare.",
                           variant: "destructive",
                         });
                         return;
                       }
                       submit.mutate(selected.id);
                     }}
-                    disabled={submit.isPending}
+                    disabled={submit.isPending || isUploading}
                   >
                     {submit.isPending ? (
                       <>

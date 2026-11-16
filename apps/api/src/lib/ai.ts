@@ -246,6 +246,10 @@ const EXAM_TYPE_LABELS: Record<string, string> = {
   tema: "tema argomentativo/espositivo in italiano, come alla prima prova dell'esame di stato",
   versione: "versione di lingua classica (latino o greco) o straniera da tradurre",
   problema: "problema di matematica o fisica con piu' quesiti, come alla seconda prova",
+  esposizione:
+    "consegna per un'esposizione ORALE di due o tre minuti, che lo studente registrera' a voce. Indica l'argomento, " +
+    "tre o quattro punti da toccare e che cosa rende buona l'esposizione (chiarezza, ordine, lessico). " +
+    "Se la materia e' una lingua straniera, scrivi la consegna in quella lingua e chiedi di parlare in quella lingua",
   prima_prova_a:
     "simulazione della prima prova dell'esame di Stato, TIPOLOGIA A (analisi e interpretazione di un testo letterario italiano). " +
     "La traccia riporta il testo da analizzare (un brano o una poesia), una breve nota sull'autore, e poi le consegne divise in " +

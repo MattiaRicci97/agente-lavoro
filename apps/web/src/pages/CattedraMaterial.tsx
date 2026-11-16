@@ -405,12 +405,13 @@ export default function CattedraMaterial() {
                   <Label className="text-xs">Consegna entro (facoltativo)</Label>
                   <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["tema", "versione", "problema"] as const).map((type) => (
+                <div className="grid grid-cols-2 gap-2">
+                  {(["tema", "versione", "problema", "esposizione"] as const).map((type) => (
                     <Button
                       key={type}
                       size="sm"
                       variant="outline"
+                      title={type === "esposizione" ? "Lo studente registra la risposta a voce; la ascolti e la valuti tu" : undefined}
                       onClick={() => handleAssign(type)}
                       disabled={assignHomework.isPending}
                     >

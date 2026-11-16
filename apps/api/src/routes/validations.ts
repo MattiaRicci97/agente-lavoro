@@ -189,6 +189,8 @@ router.get("/validations/pending", requireTeacher, async (req, res): Promise<voi
           id: writtenExamSubmissionsTable.id,
           studentName: writtenExamSubmissionsTable.studentName,
           answer: writtenExamSubmissionsTable.answer,
+          audioObjectPath: writtenExamSubmissionsTable.audioObjectPath,
+          audioSeconds: writtenExamSubmissionsTable.audioSeconds,
           grade: writtenExamSubmissionsTable.aiGrade,
           feedback: writtenExamSubmissionsTable.aiFeedback,
           createdAt: writtenExamSubmissionsTable.createdAt,

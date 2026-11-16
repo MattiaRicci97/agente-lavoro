@@ -23,6 +23,10 @@ export const writtenExamSubmissionsTable = pgTable(
     studentName: text("student_name").notNull(),
     classId: integer("class_id"),
     answer: text("answer").notNull(),
+    /** Registrazione vocale della consegna (percorso nel bucket privato), per le esposizioni a voce. */
+    audioObjectPath: text("audio_object_path"),
+    /** Durata della registrazione, in secondi. */
+    audioSeconds: integer("audio_seconds"),
     /** Proposta dell'assistente, mai mostrata da sola allo studente. */
     aiGrade: integer("ai_grade"),
     aiFeedback: text("ai_feedback").notNull().default(""),
