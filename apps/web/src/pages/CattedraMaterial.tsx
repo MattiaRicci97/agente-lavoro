@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
 import { RubricManager, type RubricCriterion } from "@/components/Rubric";
+import { MaterialParticipation } from "@/components/MaterialParticipation";
 import { MaterialTools } from "@/components/MaterialTools";
 import { PromptEditor } from "@/components/PromptEditor";
 import { EXAM_TYPE_LABELS, PRIMA_PROVA_TYPES, isMaturitaSimulation, type AssignableExamType } from "@/lib/examTypes";
@@ -320,6 +321,8 @@ export default function CattedraMaterial() {
                 )}
               </CardContent>
             </Card>
+
+            <MaterialParticipation materialId={materialId} />
           </div>
 
           <div className="space-y-6">

@@ -51,7 +51,8 @@ router.get("/me/agenda", requireAuth, async (req, res): Promise<void> => {
     .from(writtenExamsTable)
     .innerJoin(materialsTable, eq(materialsTable.id, writtenExamsTable.materialId))
     .innerJoin(materialClassesTable, eq(materialClassesTable.materialId, materialsTable.id))
-    .where(and(inArray(materialClassesTable.classId, classIds), eq(writtenExamsTable.status, "assegnato")));
+    // Nessun filtro sullo stato: i compiti nati prima di quel campo (e le verifiche di riscontro) hanno il valore predefinito.
+    .where(inArray(materialClassesTable.classId, classIds));
   if (exams.length) {
     const submitted = await db
       .select({ examId: writtenExamSubmissionsTable.examId })

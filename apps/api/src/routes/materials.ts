@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, desc, and } from "drizzle-orm";
-import { db, materialsTable, materialClassesTable, questionsTable, materialObjectivesTable } from "@sillabo/db";
+import { db, materialsTable, materialClassesTable, questionsTable, materialObjectivesTable, materialViewsTable } from "@sillabo/db";
 import {
   CreateMaterialBody,
   ListMaterialsResponse,
@@ -22,7 +22,7 @@ import {
   UnsupportedFileTypeError,
   EmptyExtractedContentError,
 } from "../lib/fileExtraction";
-import { requireAuth, requireTeacher } from "../middlewares/auth";
+import { requireAuth, requireTeacher, findApprovedStudentForMaterial } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -250,6 +250,23 @@ router.get("/materials/:id", requireAuth, async (req, res): Promise<void> => {
 
   const [withClassIds] = await attachClassIds([row]);
   res.json(GetMaterialResponse.parse(withClassIds));
+
+  // Se chi apre e' uno studente della classe, si annota che l'ha aperto (prima
+  // e ultima volta). E' un di piu': se fallisce, il materiale si apre lo stesso.
+  try {
+    const student = await findApprovedStudentForMaterial(req.authUserId!, row.id);
+    if (student) {
+      await db
+        .insert(materialViewsTable)
+        .values({ materialId: row.id, studentId: student.id })
+        .onConflictDoUpdate({
+          target: [materialViewsTable.materialId, materialViewsTable.studentId],
+          set: { lastSeenAt: new Date() },
+        });
+    }
+  } catch (err) {
+    req.log.warn({ err, materialId: row.id }, "Apertura del materiale non annotata");
+  }
 });
 
 router.post("/materials/:id/simplify", requireTeacher, async (req, res): Promise<void> => {

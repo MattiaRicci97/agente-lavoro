@@ -71,6 +71,7 @@ const APP_TABLES = [
   "study_plans",
   "device_tokens",
   "material_tools",
+  "material_views",
   "invalsi_tests",
   "invalsi_items",
   "invalsi_attempts",
