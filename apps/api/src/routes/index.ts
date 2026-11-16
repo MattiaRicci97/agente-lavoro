@@ -30,6 +30,7 @@ import metricsRouter from "./metrics";
 import courseRouter from "./course";
 import devicesRouter from "./devices";
 import guidedRouter from "./guided";
+import agendaRouter from "./agenda";
 
 const router: IRouter = Router();
 
@@ -64,5 +65,6 @@ router.use(metricsRouter);
 router.use(courseRouter);
 router.use(devicesRouter);
 router.use(guidedRouter);
+router.use(agendaRouter);
 
 export default router;

@@ -1,3 +1,4 @@
+import { StudentAgenda } from "@/components/StudentAgenda";
 import { StudentNotices } from "@/components/StudentNotices";
 import { MyMastery } from "@/components/MyMastery";
 import { useListMaterials, useGetMe } from "@sillabo/api-client-react";
@@ -29,6 +30,7 @@ export default function StudioDashboard() {
           </p>
         </div>
 
+        <StudentAgenda />
         <StudentNotices />
         <MyMastery />
 
