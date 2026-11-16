@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, ScanLine, Mic, Sparkles, Stamp, PartyPopper, PenLine, ListChecks } from "lucide-react";
+import { EXAM_TYPE_LABELS, isMaturitaSimulation, toTwentieths } from "@/lib/examTypes";
 import { weightedGrade, type RubricCriterion, type RubricScore } from "@/components/Rubric";
 import { DiagnosisEditor } from "@/components/DiagnosisEditor";
 import type { DiagnosisRow, DiagnosisDecision, ObjectiveRef } from "@/lib/diagnosis";
@@ -79,6 +80,7 @@ function SignBox({
   isPending,
   rubric,
   rubricScores,
+  twentieths,
 }: {
   proposedGrade: number | null;
   proposedFeedback: string;
@@ -95,6 +97,8 @@ function SignBox({
   /** Griglia approvata del compito, con i punteggi proposti dall'assistente. */
   rubric?: RubricCriterion[] | null;
   rubricScores?: RubricScore[];
+  /** true per le simulazioni d'esame: accanto al voto compare l'equivalente in ventesimi. */
+  twentieths?: boolean;
 }) {
   const proposedScores = Object.fromEntries((rubricScores ?? []).map((s) => [s.criterion, String(s.score)]));
   const [scores, setScores] = useState<Record<string, string>>(proposedScores);
@@ -181,6 +185,9 @@ function SignBox({
             onChange={(e) => setGrade(e.target.value)}
             placeholder="—"
           />
+          {twentieths && grade.trim() !== "" && Number(grade) >= 1 && Number(grade) <= 10 && (
+            <div className="text-xs text-muted-foreground">= {toTwentieths(Number(grade))}/20</div>
+          )}
         </div>
         <div className="flex-1 space-y-1.5">
           <Label className="text-xs">Commento per lo studente</Label>
@@ -358,7 +365,7 @@ export default function CattedraValidazioni() {
                   <span className="text-sm text-muted-foreground">
                     · {w.materialTitle} · {w.subject}
                   </span>
-                  <Badge variant="outline" className="ml-auto uppercase text-[10px]">{w.examType}</Badge>
+                  <Badge variant="outline" className="ml-auto uppercase text-[10px]">{EXAM_TYPE_LABELS[w.examType] ?? w.examType}</Badge>
                   <span className="text-xs text-muted-foreground">
                     {new Date(w.createdAt).toLocaleDateString("it-IT")}
                   </span>
@@ -392,6 +399,7 @@ export default function CattedraValidazioni() {
                     isPending={sign.isPending}
                     rubric={w.rubric}
                     rubricScores={w.rubricScores}
+                    twentieths={isMaturitaSimulation(w.examType)}
                     onSign={(grade, feedback, diagnosis, rubricScores) =>
                       sign.mutate({ kind: "written", id: w.id, grade, feedback, diagnosis, rubricScores })
                     }

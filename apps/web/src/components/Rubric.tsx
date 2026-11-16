@@ -19,7 +19,7 @@ export interface RubricScore {
   note: string;
 }
 
-const MAX_CRITERIA = 6;
+const MAX_CRITERIA = 8;
 
 /** Media pesata dei punteggi, o null se ne manca qualcuno. */
 export function weightedGrade(rubric: RubricCriterion[], scores: Record<string, number | null>): number | null {

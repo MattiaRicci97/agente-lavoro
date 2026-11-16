@@ -246,7 +246,20 @@ const EXAM_TYPE_LABELS: Record<string, string> = {
   tema: "tema argomentativo/espositivo in italiano, come alla prima prova dell'esame di stato",
   versione: "versione di lingua classica (latino o greco) o straniera da tradurre",
   problema: "problema di matematica o fisica con piu' quesiti, come alla seconda prova",
+  prima_prova_a:
+    "simulazione della prima prova dell'esame di Stato, TIPOLOGIA A (analisi e interpretazione di un testo letterario italiano). " +
+    "La traccia riporta il testo da analizzare (un brano o una poesia), una breve nota sull'autore, e poi le consegne divise in " +
+    "\"Comprensione e analisi\" (4-5 domande numerate) e \"Interpretazione\"",
+  prima_prova_b:
+    "simulazione della prima prova dell'esame di Stato, TIPOLOGIA B (analisi e produzione di un testo argomentativo). " +
+    "La traccia riporta un testo argomentativo di partenza (30-40 righe) e poi le consegne divise in " +
+    "\"Comprensione e analisi\" (3-4 domande numerate) e \"Produzione\" (la richiesta di un testo argomentativo sul tema)",
+  prima_prova_c:
+    "simulazione della prima prova dell'esame di Stato, TIPOLOGIA C (riflessione critica di carattere espositivo-argomentativo su tematiche di attualita'). " +
+    "La traccia riporta un breve testo di appoggio e la consegna, con l'invito a dare un titolo e, se si vuole, a dividere il testo in paragrafi",
 };
+
+const isPrimaProva = (examType: string) => examType.startsWith("prima_prova_");
 
 export interface WrittenExamPromptResult {
   prompt: string;
@@ -263,11 +276,16 @@ export async function generateWrittenExamPrompt(
 
   const message = await getAnthropic().messages.create({
     model: MODEL,
-    max_tokens: 2048,
+    max_tokens: isPrimaProva(examType) ? 3500 : 2048,
     system:
       "Sei un docente italiano che prepara verifiche scritte nel formato reale usato nelle scuole superiori italiane. " +
       `Il formato richiesto e': ${label}. ` +
-      "Genera una traccia completa, pronta per essere consegnata a uno studente, coerente con il materiale fornito. Scrivi solo la traccia, in italiano, senza commenti aggiuntivi. Non usare JSON, scrivi testo semplice/markdown.",
+      "Genera una traccia completa, pronta per essere consegnata a uno studente, coerente con il materiale fornito. Scrivi solo la traccia, in italiano, senza commenti aggiuntivi. Non usare JSON, scrivi testo semplice/markdown." +
+      (isPrimaProva(examType)
+        ? " Segui l'impianto delle tracce ministeriali. Il testo da analizzare o di appoggio deve venire dal materiale fornito, se ne contiene uno adatto; " +
+          "altrimenti scegli un passo di un autore le cui opere sono di pubblico dominio e riportalo SOLO se sei certo delle parole esatte: " +
+          "se non lo sei, scrivi un testo di appoggio originale e dichiaralo come tale, senza attribuirlo a nessun autore. Non inventare citazioni."
+        : ""),
     messages: [
       {
         role: "user",

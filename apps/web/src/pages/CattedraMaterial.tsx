@@ -25,13 +25,11 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
 import { RubricManager, type RubricCriterion } from "@/components/Rubric";
+import { PromptEditor } from "@/components/PromptEditor";
+import { EXAM_TYPE_LABELS, PRIMA_PROVA_TYPES, isMaturitaSimulation, type AssignableExamType } from "@/lib/examTypes";
 import { MaterialObjectives } from "@/components/MaterialObjectives";
 
-const examTypeLabels: Record<string, string> = {
-  tema: "Tema",
-  versione: "Versione",
-  problema: "Problema",
-};
+const examTypeLabels = EXAM_TYPE_LABELS;
 
 /** Compito assegnato, come lo vede il docente. */
 interface TeacherAssignment {
@@ -179,14 +177,16 @@ export default function CattedraMaterial() {
     });
   };
 
-  const handleAssign = (examType: "tema" | "versione" | "problema") => {
+  const handleAssign = (examType: AssignableExamType) => {
     assignHomework.mutate(
       { examType, dueDate: dueDate || null },
       {
         onSuccess: () => {
           toast({
-            title: "Compito assegnato",
-            description: `${examTypeLabels[examType]} visibile agli studenti delle classi collegate.`,
+            title: isMaturitaSimulation(examType) ? "Simulazione assegnata" : "Compito assegnato",
+            description: isMaturitaSimulation(examType)
+              ? "Ha già la griglia ministeriale. Rileggi la traccia: l'ha scritta l'assistente."
+              : `${examTypeLabels[examType]} visibile agli studenti delle classi collegate.`,
           });
           setDueDate("");
         },
@@ -414,6 +414,26 @@ export default function CattedraMaterial() {
                     </Button>
                   ))}
                 </div>
+                <div className="rounded-md border p-3 space-y-2">
+                  <div className="text-xs font-medium">Simulazione della prima prova di Maturità</div>
+                  <p className="text-xs text-muted-foreground">
+                    Traccia nel formato ministeriale e griglia con gli indicatori ufficiali, in ventesimi.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {PRIMA_PROVA_TYPES.map((t) => (
+                      <Button
+                        key={t.type}
+                        size="sm"
+                        variant="outline"
+                        title={t.hint}
+                        onClick={() => handleAssign(t.type)}
+                        disabled={assignHomework.isPending}
+                      >
+                        {assignHomework.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : t.short}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
                 <div className="rounded-md border border-dashed p-3 space-y-2">
                   <div className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <Printer className="h-3.5 w-3.5" />
@@ -463,7 +483,13 @@ export default function CattedraMaterial() {
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
-                        <div className="line-clamp-2 text-xs text-muted-foreground">{a.prompt}</div>
+                        <PromptEditor
+                          examId={a.id}
+                          prompt={a.prompt}
+                          locked={a.submissionsCount > 0}
+                          highlight={isMaturitaSimulation(a.examType)}
+                          onChanged={() => queryClient.invalidateQueries({ queryKey: assignmentsKey })}
+                        />
                         <RubricManager
                           examId={a.id}
                           rubric={a.rubric}

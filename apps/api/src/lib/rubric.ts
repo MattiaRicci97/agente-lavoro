@@ -12,7 +12,7 @@ import type { RubricCriterion, RubricScore } from "@sillabo/db";
  */
 
 export const MIN_CRITERIA = 2;
-export const MAX_CRITERIA = 6;
+export const MAX_CRITERIA = 8;
 
 export const RubricCriterionSchema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -49,7 +49,7 @@ export function normalizeRubric(criteria: RubricCriterion[]): RubricCriterion[] 
 /** Valida una griglia proposta (dal modello o dal docente) e ne sistema i pesi. */
 export function parseRubric(raw: unknown): RubricCriterion[] {
   const parsed = RubricSchema.safeParse(raw);
-  if (!parsed.success) throw new RubricError("La griglia deve avere da 2 a 6 criteri, ciascuno con un nome e un peso.");
+  if (!parsed.success) throw new RubricError("La griglia deve avere da 2 a 8 criteri, ciascuno con un nome e un peso.");
   const normalized = normalizeRubric(parsed.data);
   if (normalized.length < MIN_CRITERIA) throw new RubricError("La griglia deve avere almeno due criteri diversi.");
   return normalized;

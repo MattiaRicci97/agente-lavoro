@@ -13,11 +13,11 @@ import {
 } from "@sillabo/db";
 import { requireAuth } from "../middlewares/auth";
 import { studentRowsFor } from "../lib/recovery";
+import { EXAM_TYPE_NAMES as EXAM_TYPE } from "../lib/examTypes";
 import { buildAgenda, type AgendaItem } from "../lib/agenda";
 
 const router: IRouter = Router();
 
-const EXAM_TYPE: Record<string, string> = { tema: "Tema", versione: "Versione", problema: "Problema" };
 
 /**
  * L'agenda dello studente: compiti da consegnare, attivita' guidate aperte,

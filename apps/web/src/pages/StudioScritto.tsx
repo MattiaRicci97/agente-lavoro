@@ -1,4 +1,5 @@
 import { DiagnosisSummary } from "@/components/DiagnosisSummary";
+import { EXAM_TYPE_LABELS, isMaturitaSimulation, toTwentieths } from "@/lib/examTypes";
 import { RubricTable, type RubricCriterion, type RubricScore } from "@/components/Rubric";
 import type { StudentDiagnosisRow } from "@/lib/diagnosis";
 import { useState } from "react";
@@ -14,11 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Loader2, FileText, CalendarClock, Hourglass, CheckCircle2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const examTypeLabels: Record<string, string> = {
-  tema: "Tema",
-  versione: "Versione",
-  problema: "Problema",
-};
+const examTypeLabels = EXAM_TYPE_LABELS;
 
 interface MySubmission {
   id: number;
@@ -53,7 +50,7 @@ function formatDue(due: string) {
 }
 
 /** Esito della consegna: in attesa del docente, oppure valutato da lui. */
-function SubmissionOutcome({ submission }: { submission: MySubmission }) {
+function SubmissionOutcome({ submission, twentieths }: { submission: MySubmission; twentieths?: boolean }) {
   if (submission.status !== "validata") {
     return (
       <Card className="border-amber-300/60 bg-amber-50/60">
@@ -80,6 +77,11 @@ function SubmissionOutcome({ submission }: { submission: MySubmission }) {
           </div>
           {submission.grade !== null && (
             <div className="mt-4 text-6xl font-bold text-secondary">{submission.grade}/10</div>
+          )}
+          {submission.grade !== null && twentieths && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Sulla scala dell'esame: {toTwentieths(submission.grade)}/20. È una simulazione, serve ad allenarsi.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -256,7 +258,7 @@ export default function StudioScritto() {
 
             {selected.mySubmission ? (
               <>
-                <SubmissionOutcome submission={selected.mySubmission} />
+                <SubmissionOutcome submission={selected.mySubmission} twentieths={isMaturitaSimulation(selected.examType)} />
                 {selected.rubric && selected.rubric.length > 0 && !!selected.mySubmission.rubricScores?.length && (
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium">

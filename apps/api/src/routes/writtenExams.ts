@@ -11,6 +11,7 @@ import {
 } from "@sillabo/db";
 import { GenerateWrittenExamParams } from "@sillabo/api-zod";
 import { generateWrittenExamPrompt, gradeWrittenExam, generateRubric } from "../lib/ai";
+import { EXAM_TYPES, EXAM_TYPE_NAMES, isMaturitaSimulation, PRIMA_PROVA_RUBRICS } from "../lib/examTypes";
 import { parseRubric, parseRubricScores, weightedGrade, RubricError } from "../lib/rubric";
 import { requireAuth, requireTeacher, findApprovedStudentForMaterial } from "../middlewares/auth";
 import { teacherCanManageMaterial } from "../lib/materialAccess";
@@ -28,7 +29,7 @@ import {
 const router: IRouter = Router();
 
 const AssignSchema = z.object({
-  examType: z.enum(["tema", "versione", "problema"]),
+  examType: z.enum(EXAM_TYPES),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   instructions: z.string().trim().max(1000).nullable().optional(),
 });
@@ -57,7 +58,11 @@ function approvedRubric(exam: typeof writtenExamsTable.$inferSelect) {
  * Il compito su cui il docente puo' ancora cambiare la griglia: suo, e senza
  * consegne (cambiarla dopo renderebbe diverse le correzioni dei compagni).
  */
-async function examWithEditableRubric(req: Request, res: Response) {
+async function examWithEditableRubric(
+  req: Request,
+  res: Response,
+  lockedMessage = "Ci sono gia' consegne: la griglia non si puo' piu' cambiare.",
+) {
   const id = Number(req.params.id);
   const [exam] = Number.isInteger(id) ? await db.select().from(writtenExamsTable).where(eq(writtenExamsTable.id, id)) : [];
   if (!exam || !(await teacherCanManageMaterial(req.teacher!.id, exam.materialId))) {
@@ -69,7 +74,7 @@ async function examWithEditableRubric(req: Request, res: Response) {
     .from(writtenExamSubmissionsTable)
     .where(eq(writtenExamSubmissionsTable.examId, exam.id));
   if (submissions > 0) {
-    res.status(409).json({ error: "Ci sono gia' consegne: la griglia non si puo' piu' cambiare." });
+    res.status(409).json({ error: lockedMessage });
     return null;
   }
   return exam;
@@ -266,6 +271,11 @@ router.post("/materials/:id/written-exams", requireTeacher, async (req, res): Pr
       dueDate: parsed.data.dueDate ?? null,
       instructions: parsed.data.instructions ?? null,
       status: "assegnato",
+      // Una simulazione nasce con la griglia ministeriale gia' in vigore: non
+      // e' una proposta dell'assistente. Il docente puo' ritoccarla fino alla prima consegna.
+      ...(isMaturitaSimulation(parsed.data.examType)
+        ? { rubric: PRIMA_PROVA_RUBRICS[parsed.data.examType], rubricStatus: "approvata" }
+        : {}),
     })
     .returning();
 
@@ -279,7 +289,7 @@ router.post("/materials/:id/written-exams", requireTeacher, async (req, res): Pr
     teacherId: req.teacher!.id,
     authorName: req.teacher!.name,
     kind: "compito",
-    title: `Compito assegnato: ${parsed.data.examType} su ${material.title}`,
+    title: `Compito assegnato: ${EXAM_TYPE_NAMES[parsed.data.examType].toLowerCase()} su ${material.title}`,
     body: [
       parsed.data.instructions ?? "",
       parsed.data.dueDate
@@ -293,6 +303,26 @@ router.post("/materials/:id/written-exams", requireTeacher, async (req, res): Pr
   });
 
   res.status(201).json({ ...assignmentView(exam), ...teacherRubric(exam), submissionsCount: 0, toValidateCount: 0 });
+});
+
+/**
+ * Il docente corregge la traccia scritta dall'assistente. Solo finche' nessuno
+ * ha consegnato: dopo, cambierebbe il compito sotto i piedi di chi l'ha svolto.
+ */
+router.put("/written-exams/:id/prompt", requireTeacher, async (req, res): Promise<void> => {
+  const exam = await examWithEditableRubric(req, res, "Ci sono gia' consegne: la traccia non si puo' piu' cambiare.");
+  if (!exam) return;
+  const parsed = z.object({ prompt: z.string().trim().min(20).max(12000) }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "La traccia deve avere tra 20 e 12000 caratteri." });
+    return;
+  }
+  const [updated] = await db
+    .update(writtenExamsTable)
+    .set({ prompt: parsed.data.prompt })
+    .where(eq(writtenExamsTable.id, exam.id))
+    .returning();
+  res.json({ id: updated.id, prompt: updated.prompt });
 });
 
 /** L'assistente propone una griglia: resta in bozza finche' il docente non la approva. */
