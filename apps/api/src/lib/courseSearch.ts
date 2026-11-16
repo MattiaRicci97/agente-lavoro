@@ -139,8 +139,17 @@ export interface Passage {
 }
 
 /** I passaggi del corso piu' pertinenti a una domanda. */
-export async function searchCourse(input: { classId: number; subject: string; query: string; limit?: number }): Promise<Passage[]> {
-  const materials = await courseMaterials(input.classId, input.subject);
+export async function searchCourse(input: {
+  classId: number;
+  subject: string;
+  query: string;
+  limit?: number;
+  /** Se indicati, la ricerca resta dentro questi materiali del corso. */
+  onlyMaterialIds?: number[];
+}): Promise<Passage[]> {
+  const all = await courseMaterials(input.classId, input.subject);
+  const only = input.onlyMaterialIds ? new Set(input.onlyMaterialIds) : null;
+  const materials = only ? all.filter((m) => only.has(m.id)) : all;
   if (!materials.length) return [];
   const ids = materials.map((m) => m.id);
   await ensureIndexed(ids);

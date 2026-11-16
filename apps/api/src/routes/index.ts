@@ -29,6 +29,7 @@ import classMapRouter from "./classMap";
 import metricsRouter from "./metrics";
 import courseRouter from "./course";
 import devicesRouter from "./devices";
+import guidedRouter from "./guided";
 
 const router: IRouter = Router();
 
@@ -62,5 +63,6 @@ router.use(classMapRouter);
 router.use(metricsRouter);
 router.use(courseRouter);
 router.use(devicesRouter);
+router.use(guidedRouter);
 
 export default router;

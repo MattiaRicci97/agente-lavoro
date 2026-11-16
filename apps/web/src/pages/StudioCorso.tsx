@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { GuidedActivitiesList } from "@/components/GuidedActivitiesList";
 import { MessagesSquare, Send, Loader2, FileText, Mic, ListChecks, GraduationCap, Clock } from "lucide-react";
 
 interface Course {
@@ -219,6 +220,8 @@ export default function StudioCorso() {
             </Select>
           )}
         </div>
+
+        {messages.length === 0 && <GuidedActivitiesList />}
 
         <div className="space-y-3 min-h-[240px]">
           {messages.length === 0 && (

@@ -987,6 +987,8 @@ export async function askCourseAssistant(input: {
   question: string;
   initialPassages: CoursePassage[];
   search: (query: string) => Promise<CoursePassage[]>;
+  /** Se presente, la chat e' un'attivita' guidata assegnata dal docente. */
+  guided?: { title: string; brief: string };
 }): Promise<{ answer: string; usedPassages: CoursePassage[] }> {
   const used = [...input.initialPassages];
   const inclusivo = input.besDsa
@@ -999,7 +1001,12 @@ export async function askCourseAssistant(input: {
     "Rispondi in italiano, con tono caldo e chiaro. Cita le fonti tra parentesi quadre con il loro numero, es. [2]. " +
     "Se nel materiale del corso l'argomento non c'e', dillo con semplicita' e suggerisci di chiederlo al docente: non inventare e non attingere ad altre fonti. " +
     "Non svolgere i compiti al posto dello studente: spiega e guida. " +
-    "Quando ha senso, ricorda che puo' chiederti un piano di ripasso o di simulare un'interrogazione sull'argomento. " +
+    (input.guided
+      ? `Questa e' un'attivita' guidata assegnata dal docente: «${input.guided.title}». Consegna del docente: ${input.guided.brief} ` +
+        "Resta su questo argomento: se lo studente esce dal tema, riportalo con garbo alla consegna. " +
+        "Guida con domande: parti da cio' che lo studente sa gia', dai un indizio alla volta e lascia a lui il passo successivo; non dare subito la soluzione completa. " +
+        "Chiudi ogni risposta con una sola domanda breve che gli faccia fare un passo avanti o verifichi che abbia capito. "
+      : "Quando ha senso, ricorda che puo' chiederti un piano di ripasso o di simulare un'interrogazione sull'argomento. ") +
     inclusivo;
 
   const messages: Anthropic.MessageParam[] = [
@@ -1054,6 +1061,79 @@ export async function askCourseAssistant(input: {
     messages.push({ role: "user", content: results });
   }
   throw new Error("L'assistente non e' riuscito a concludere la risposta");
+}
+
+export const GUIDED_LEVELS = ["sicuro", "incerto"] as const;
+
+export const GuidedSummarySchema = z.object({
+  signals: z
+    .array(z.object({ objectiveCode: z.string().trim().min(1).max(40), level: z.enum(GUIDED_LEVELS) }))
+    .max(20)
+    .default([]),
+  stuckPoints: z.array(z.string().trim().min(3).max(140)).max(3).default([]),
+});
+
+export interface GuidedSummary {
+  signals: Array<{ objectiveCode: string; level: (typeof GUIDED_LEVELS)[number] }>;
+  stuckPoints: string[];
+}
+
+/** Tiene solo i segnali riferiti a un obiettivo dell'attivita', uno per obiettivo. */
+export function parseGuidedSummary(raw: unknown, codes: string[]): GuidedSummary {
+  const parsed = GuidedSummarySchema.safeParse(raw);
+  if (!parsed.success) return { signals: [], stuckPoints: [] };
+  const allowed = new Set(codes);
+  const seen = new Set<string>();
+  const signals = parsed.data.signals.filter((s) => {
+    if (!allowed.has(s.objectiveCode) || seen.has(s.objectiveCode)) return false;
+    seen.add(s.objectiveCode);
+    return true;
+  });
+  return { signals, stuckPoints: parsed.data.stuckPoints };
+}
+
+/**
+ * Alla chiusura di un'attivita' guidata: che cosa e' emerso dalla
+ * conversazione, in forma utile al riepilogo di classe. Parla di concetti,
+ * mai della persona; il modello non riceve il nome dello studente e la
+ * conversazione non viene conservata.
+ */
+export async function summarizeGuidedSession(input: {
+  subject: string;
+  title: string;
+  brief: string;
+  objectives: Array<{ code: string; title: string }>;
+  transcript: Array<{ role: "user" | "assistant"; content: string }>;
+}): Promise<GuidedSummary> {
+  const list = input.objectives.length
+    ? input.objectives.map((o) => `- ${o.code}: ${o.title}`).join("\n")
+    : "(nessun obiettivo indicato: lascia signals vuoto)";
+  const dialogue = input.transcript
+    .map((m) => `${m.role === "user" ? "Studente" : "Assistente"}: ${m.content.slice(0, 1500)}`)
+    .join("\n");
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 800,
+    system:
+      "Leggi la conversazione di un'attivita' guidata di ripasso e riassumi che cosa e' emerso, per aiutare il docente a capire dove la classe fatica. " +
+      "Per ciascun obiettivo EFFETTIVAMENTE toccato nella conversazione indica \"sicuro\" (lo studente ci e' arrivato senza difficolta' rilevanti) o \"incerto\" (ha avuto bisogno di piu' aiuti o ha mostrato confusione); gli obiettivi non toccati non vanno elencati. " +
+      "In stuckPoints scrivi al massimo tre punti in cui ci si e' bloccati, ciascuno come concetto in poche parole (es. \"cambio di verso dividendo per un numero negativo\"). " +
+      "Descrivi concetti, mai la persona: nessun giudizio, nessun riferimento allo studente. Rispondi SOLO con JSON valido.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Materia: ${input.subject}\nAttivita': ${input.title}\nConsegna: ${input.brief}\n\nObiettivi dell'attivita':\n${list}\n\nConversazione:\n${dialogue}\n\n` +
+          `Rispondi con JSON: {"signals": [{"objectiveCode": "...", "level": "sicuro|incerto"}], "stuckPoints": ["..."]}`,
+      },
+    ],
+  });
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("Anthropic non ha restituito testo");
+  return parseGuidedSummary(
+    extractJson<unknown>(textBlock.text),
+    input.objectives.map((o) => o.code),
+  );
 }
 
 export const ReviewPlanSchema = z.object({

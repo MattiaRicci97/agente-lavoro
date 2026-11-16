@@ -70,6 +70,10 @@ const APP_TABLES = [
   "course_chunks",
   "study_plans",
   "device_tokens",
+  "guided_activities",
+  "guided_activity_materials",
+  "guided_activity_objectives",
+  "guided_activity_sessions",
 ];
 
 const MODULE_CATALOG: Array<{
@@ -372,6 +376,8 @@ async function main() {
     // finivano in scansioni sequenziali, che crescono con i dati della scuola.
     const INDEXES: Array<[string, string]> = [
       ["class_teachers_teacher_idx", "class_teachers (teacher_id)"],
+      ["guided_activities_class_idx", "guided_activities (class_id)"],
+      ["guided_activity_sessions_student_idx", "guided_activity_sessions (student_id)"],
       ["students_class_idx", "students (class_id)"],
       ["material_classes_class_idx", "material_classes (class_id)"],
       ["materials_teacher_idx", "materials (teacher_id)"],
