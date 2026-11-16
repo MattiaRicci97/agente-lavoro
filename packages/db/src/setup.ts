@@ -70,6 +70,7 @@ const APP_TABLES = [
   "course_chunks",
   "study_plans",
   "device_tokens",
+  "material_tools",
   "guided_activities",
   "guided_activity_materials",
   "guided_activity_objectives",

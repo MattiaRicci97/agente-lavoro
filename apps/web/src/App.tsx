@@ -21,6 +21,7 @@ import CattedraMappa from "./pages/CattedraMappa";
 import CattedraEfficacia from "./pages/CattedraEfficacia";
 import StudioCorso from "./pages/StudioCorso";
 import StudioAttivita from "./pages/StudioAttivita";
+import StudioStrumenti from "./pages/StudioStrumenti";
 import CattedraAttivita from "./pages/CattedraAttivita";
 import CattedraClassi from "./pages/CattedraClassi";
 import CattedraProfilo from "./pages/CattedraProfilo";
@@ -344,6 +345,11 @@ function Router() {
       <Route path="/studio/finanza/:id">
         <StudentGate>
           <StudioFinEdLesson />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/material/:id/strumenti">
+        <StudentGate>
+          <StudioStrumenti />
         </StudentGate>
       </Route>
       <Route path="/studio/material/:id/quiz">

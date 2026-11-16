@@ -28,3 +28,4 @@ export * from "./examDates";
 export * from "./moduleLearning";
 export * from "./photoCorrections";
 export * from "./guided";
+export * from "./materialTools";

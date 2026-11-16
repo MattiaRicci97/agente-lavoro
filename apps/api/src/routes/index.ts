@@ -31,6 +31,7 @@ import courseRouter from "./course";
 import devicesRouter from "./devices";
 import guidedRouter from "./guided";
 import agendaRouter from "./agenda";
+import materialToolsRouter from "./materialTools";
 
 const router: IRouter = Router();
 
@@ -66,5 +67,6 @@ router.use(courseRouter);
 router.use(devicesRouter);
 router.use(guidedRouter);
 router.use(agendaRouter);
+router.use(materialToolsRouter);
 
 export default router;

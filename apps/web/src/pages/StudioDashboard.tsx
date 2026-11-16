@@ -1,19 +1,26 @@
 import { StudentAgenda } from "@/components/StudentAgenda";
 import { StudentNotices } from "@/components/StudentNotices";
 import { MyMastery } from "@/components/MyMastery";
-import { useListMaterials, useGetMe } from "@sillabo/api-client-react";
+import { useListMaterials, useGetMe, customFetch } from "@sillabo/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { StudentLayout } from "@/components/StudentLayout";
 import { timeGreeting, firstName } from "@/lib/greeting";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { BookOpen, BrainCircuit, PlayCircle, FileText, GraduationCap, ScanLine, ArrowRight } from "lucide-react";
+import { BookOpen, BrainCircuit, PlayCircle, FileText, GraduationCap, ScanLine, ArrowRight, BookA } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
 
 export default function StudioDashboard() {
   const { data: materials, isLoading } = useListMaterials();
   const { data: me } = useGetMe();
+  // I materiali per cui il docente ha condiviso glossario o traduzione.
+  const { data: sharedTools } = useQuery({
+    queryKey: ["mySharedTools"],
+    queryFn: () => customFetch<{ materialIds: number[] }>("/api/me/shared-tools", { responseType: "json" }),
+  });
+  const withTools = new Set(sharedTools?.materialIds ?? []);
 
   const name = firstName(me?.studentMemberships?.[0]?.name);
   const greeting = name ? `${timeGreeting()}, ${name}!` : "Cosa studiamo oggi?";
@@ -101,6 +108,15 @@ export default function StudioDashboard() {
                       </Link>
                     </Button>
                   </div>
+
+                  {withTools.has(material.id) && (
+                    <Button asChild variant="ghost" className="w-full justify-center text-secondary hover:bg-secondary/10">
+                      <Link href={`/studio/material/${material.id}/strumenti`}>
+                        <BookA className="w-4 h-4 mr-2" />
+                        Glossario e aiuti dal docente
+                      </Link>
+                    </Button>
+                  )}
 
                   <Button asChild variant="ghost" className="w-full justify-center text-secondary hover:bg-secondary/10">
                     <Link href={`/studio/material/${material.id}/tutor`}>

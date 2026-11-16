@@ -1081,6 +1081,43 @@ export async function askCourseAssistant(input: {
   throw new Error("L'assistente non e' riuscito a concludere la risposta");
 }
 
+/**
+ * Prima stesura di uno strumento per la lezione (errori tipici, spunti,
+ * glossario, sintesi tradotta). Al modello va solo il materiale: nessun dato
+ * sulla classe. E' una bozza che il docente rilegge.
+ */
+export async function draftMaterialTool(input: {
+  instructions: string;
+  language: string | null;
+  title: string;
+  subject: string;
+  gradeLevel: string;
+  content: string;
+}): Promise<string> {
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 2500,
+    system:
+      "Sei un docente italiano di scuola superiore esperto di didattica, che prepara per un collega uno strumento di lavoro su un materiale di lezione. " +
+      "Scrivi in modo concreto e sintetico, in testo semplice con elenchi; niente premesse ne' commenti finali. " +
+      (input.language ? `Scrivi il testo in ${input.language}. ` : "Scrivi in italiano. ") +
+      input.instructions,
+    messages: [
+      {
+        role: "user",
+        content:
+          `Materia: ${input.subject}\nClasse: ${input.gradeLevel}\nTitolo: ${input.title}\n\n` +
+          `Materiale:\n${input.content.slice(0, 12000)}`,
+      },
+    ],
+  });
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("Anthropic non ha restituito testo");
+  const text = textBlock.text.trim();
+  if (text.length < 20) throw new Error("La bozza dell'AI e' troppo breve. Riprova.");
+  return text;
+}
+
 export const GUIDED_LEVELS = ["sicuro", "incerto"] as const;
 
 export const GuidedSummarySchema = z.object({
