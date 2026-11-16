@@ -22,6 +22,8 @@ import CattedraEfficacia from "./pages/CattedraEfficacia";
 import StudioCorso from "./pages/StudioCorso";
 import StudioAttivita from "./pages/StudioAttivita";
 import StudioStrumenti from "./pages/StudioStrumenti";
+import StudioProva from "./pages/StudioProva";
+import CattedraInvalsi from "./pages/CattedraInvalsi";
 import CattedraAttivita from "./pages/CattedraAttivita";
 import CattedraClassi from "./pages/CattedraClassi";
 import CattedraProfilo from "./pages/CattedraProfilo";
@@ -236,6 +238,11 @@ function Router() {
           <CattedraEfficacia />
         </TeacherGate>
       </Route>
+      <Route path="/cattedra/invalsi">
+        <TeacherGate>
+          <CattedraInvalsi />
+        </TeacherGate>
+      </Route>
       <Route path="/cattedra/attivita">
         <TeacherGate>
           <CattedraAttivita />
@@ -300,6 +307,11 @@ function Router() {
       <Route path="/studio">
         <StudentGate>
           <StudioDashboard />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/prova/:id">
+        <StudentGate>
+          <StudioProva />
         </StudentGate>
       </Route>
       <Route path="/studio/attivita/:id">

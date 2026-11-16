@@ -4,7 +4,7 @@
  * cosi' si puo' provare da solo.
  */
 
-export type AgendaKind = "compito" | "attivita" | "recupero" | "verifica";
+export type AgendaKind = "compito" | "attivita" | "recupero" | "verifica" | "prova";
 
 export interface AgendaItem {
   kind: AgendaKind;

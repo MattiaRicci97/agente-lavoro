@@ -10,6 +10,8 @@ import {
   recoveryItemsTable,
   guidedActivitiesTable,
   guidedActivitySessionsTable,
+  invalsiTestsTable,
+  invalsiAttemptsTable,
 } from "@sillabo/db";
 import { requireAuth } from "../middlewares/auth";
 import { studentRowsFor } from "../lib/recovery";
@@ -122,6 +124,23 @@ router.get("/me/agenda", requireAuth, async (req, res): Promise<void> => {
       dueDate: today,
       link: "/studio/lampo",
     });
+  }
+
+  // Prove di allenamento INVALSI pubblicate e non ancora svolte.
+  const tests = await db
+    .select()
+    .from(invalsiTestsTable)
+    .where(and(inArray(invalsiTestsTable.classId, classIds), eq(invalsiTestsTable.status, "pubblicata")));
+  if (tests.length) {
+    const taken = await db
+      .select({ testId: invalsiAttemptsTable.testId })
+      .from(invalsiAttemptsTable)
+      .where(and(inArray(invalsiAttemptsTable.testId, tests.map((t) => t.id)), inArray(invalsiAttemptsTable.studentId, studentIds)));
+    const done = new Set(taken.map((t) => t.testId));
+    for (const t of tests) {
+      if (done.has(t.id)) continue;
+      items.push({ kind: "prova", title: `Allenamento INVALSI: ${t.title}`, subtitle: `${t.subject} · circa ${t.minutes} min`, dueDate: null, link: `/studio/prova/${t.id}` });
+    }
   }
 
   // Verifiche e interrogazioni in calendario.

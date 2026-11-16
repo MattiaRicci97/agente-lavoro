@@ -1118,6 +1118,58 @@ export async function draftMaterialTool(input: {
   return text;
 }
 
+const INVALSI_STYLE: Record<string, string> = {
+  Italiano:
+    "Comprensione della lettura e riflessione sulla lingua. Scrivi un testo da leggere di 25-40 righe (narrativo, espositivo o argomentativo, originale e non attribuito a nessun autore) e poi i quesiti: " +
+    "la maggior parte sulla comprensione (informazioni esplicite, inferenze, lessico in contesto, struttura e scopo del testo), gli ultimi sulla grammatica. Ambiti: \"Comprensione del testo\", \"Lessico\", \"Riflessione sulla lingua\".",
+  Matematica:
+    "Quesiti brevi e indipendenti, ambientati quando possibile in situazioni reali, che chiedono di ragionare piu' che di applicare formule. Niente testo da leggere (passage null). " +
+    "Ambiti: \"Numeri\", \"Spazio e figure\", \"Relazioni e funzioni\", \"Dati e previsioni\". Scrivi le formule in testo semplice.",
+  Inglese:
+    "Reading comprehension. Scrivi IN INGLESE un testo da leggere di 20-30 righe (originale, non attribuito a nessun autore) e i quesiti in inglese, con le alternative in inglese; " +
+    "le spiegazioni in italiano. Ambiti: \"Reading: main idea\", \"Reading: detail\", \"Reading: inference\", \"Vocabulary in context\".",
+};
+
+/**
+ * Bozza di una prova di allenamento in stile INVALSI. Non riproduce quesiti
+ * ufficiali. Al modello vanno solo materia, anno e l'eventuale ambito chiesto
+ * dal docente; la risposta va validata con parseGeneratedTest.
+ */
+export async function generateInvalsiTest(input: {
+  subject: string;
+  gradeLevel: string;
+  count: number;
+  focus: string | null;
+}): Promise<unknown> {
+  const level =
+    input.subject === "Inglese"
+      ? input.gradeLevel.startsWith("5") ? "livello B2 del Quadro comune europeo" : "livello B1 del Quadro comune europeo"
+      : `fine della ${input.gradeLevel.startsWith("5") ? "quinta" : "seconda"} superiore`;
+  const message = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 8000,
+    system:
+      "Sei un docente italiano esperto di valutazione che prepara una prova di ALLENAMENTO nello stile delle rilevazioni nazionali INVALSI per la scuola superiore. " +
+      "Non riprodurre quesiti di prove ufficiali: scrivi quesiti nuovi. " +
+      `${INVALSI_STYLE[input.subject] ?? ""} ` +
+      "Ogni quesito e' a scelta multipla con ESATTAMENTE quattro alternative, una sola corretta; le alternative sbagliate devono essere plausibili e corrispondere a errori tipici. " +
+      "Varia la posizione della risposta corretta. Per ogni quesito scrivi una spiegazione breve del perche' quella e' la risposta giusta. Rispondi SOLO con JSON valido.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Materia: ${input.subject}\nDifficolta': ${level}\nNumero di quesiti: ${input.count}\n` +
+          (input.focus ? `Il docente chiede di concentrarsi su: ${input.focus}\n` : "") +
+          `\nRispondi con JSON: {"title": "titolo breve della prova", "passage": "testo da leggere, oppure null", ` +
+          `"items": [{"question": "...", "options": ["...", "...", "...", "..."], "correctIndex": 0, "explanation": "...", "area": "..."}]}`,
+      },
+    ],
+  });
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("Anthropic non ha restituito testo");
+  return extractJson<unknown>(textBlock.text);
+}
+
 export const GUIDED_LEVELS = ["sicuro", "incerto"] as const;
 
 export const GuidedSummarySchema = z.object({

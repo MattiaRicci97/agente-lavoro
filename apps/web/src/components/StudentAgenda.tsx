@@ -3,10 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@sillabo/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CalendarCheck, FileText, Compass, Target, CalendarClock, ChevronRight, type LucideIcon } from "lucide-react";
+import { CalendarCheck, FileText, Compass, Target, CalendarClock, ClipboardList, ChevronRight, type LucideIcon } from "lucide-react";
 
 interface AgendaEntry {
-  kind: "compito" | "attivita" | "recupero" | "verifica";
+  kind: "compito" | "attivita" | "recupero" | "verifica" | "prova";
   title: string;
   subtitle: string;
   dueDate: string | null;
@@ -20,6 +20,7 @@ const ICON: Record<AgendaEntry["kind"], LucideIcon> = {
   attivita: Compass,
   recupero: Target,
   verifica: CalendarClock,
+  prova: ClipboardList,
 };
 
 function whenLabel(e: AgendaEntry): string {

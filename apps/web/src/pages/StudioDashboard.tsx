@@ -1,3 +1,4 @@
+import { StudentInvalsiList } from "@/components/StudentInvalsiList";
 import { StudentAgenda } from "@/components/StudentAgenda";
 import { StudentNotices } from "@/components/StudentNotices";
 import { MyMastery } from "@/components/MyMastery";
@@ -38,6 +39,7 @@ export default function StudioDashboard() {
         </div>
 
         <StudentAgenda />
+        <StudentInvalsiList />
         <StudentNotices />
         <MyMastery />
 
