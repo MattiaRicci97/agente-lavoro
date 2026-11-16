@@ -100,6 +100,20 @@ describe.skipIf(!DB_URL)("Strumenti per la lezione", () => {
     expect(JSON.stringify(h.anthropicRequests.slice(before))).toContain("Scrivi il testo in Inglese");
   });
 
+  it("il ripasso da ascoltare e' un copione che il docente puo' condividere", async () => {
+    const before = h.anthropicRequests.length;
+    h.anthropicReplies(() => "## La cellula\nLa cellula è l'unità fondamentale dei viventi.\n\n## Prova tu\nChe cosa contiene il nucleo?");
+    const res = await h.api(`/materials/${ids.material}/tools/ripasso_audio/draft`, { method: "POST", token: tokens.teacher, json: {} });
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(h.anthropicRequests.slice(before))).toContain("DA ASCOLTARE");
+    const body = "## La cellula\nRiletto dal docente.";
+    const share = await h.api(`/materials/${ids.material}/tools/ripasso_audio`, { method: "PUT", token: tokens.teacher, json: { body, shared: true } });
+    expect(share.status).toBe(200);
+    const seen = (await (await shared(tokens.student)).json()) as { tools: Array<{ kind: string; body: string }> };
+    expect(seen.tools).toContainEqual({ kind: "ripasso_audio", language: null, body });
+    await h.api(`/materials/${ids.material}/tools/ripasso_audio`, { method: "DELETE", token: tokens.teacher });
+  });
+
   it("strumento sconosciuto rifiutato; eliminazione", async () => {
     expect((await h.api(`/materials/${ids.material}/tools/oroscopo`, { method: "PUT", token: tokens.teacher, json: { body: "x" } })).status).toBe(400);
     expect((await h.api(`/materials/${ids.material}/tools/errori_tipici`, { method: "DELETE", token: tokens.teacher })).status).toBe(204);

@@ -18,7 +18,7 @@ export const materialToolsTable = pgTable(
     materialId: integer("material_id")
       .notNull()
       .references(() => materialsTable.id, { onDelete: "cascade" }),
-    /** "errori_tipici" | "spunti" | "glossario" | "traduzione" */
+    /** "errori_tipici" | "spunti" | "glossario" | "traduzione" | "ripasso_audio" */
     kind: text("kind").notNull(),
     /** Solo per la traduzione: la lingua di arrivo. */
     language: text("language"),

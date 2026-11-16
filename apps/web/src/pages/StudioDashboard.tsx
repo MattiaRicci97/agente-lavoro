@@ -115,7 +115,7 @@ export default function StudioDashboard() {
                     <Button asChild variant="ghost" className="w-full justify-center text-secondary hover:bg-secondary/10">
                       <Link href={`/studio/material/${material.id}/strumenti`}>
                         <BookA className="w-4 h-4 mr-2" />
-                        Glossario e aiuti dal docente
+                        Ripasso e aiuti dal docente
                       </Link>
                     </Button>
                   )}

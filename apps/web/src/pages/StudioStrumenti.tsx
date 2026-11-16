@@ -5,10 +5,11 @@ import { StudentLayout } from "@/components/StudentLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, BookA, Languages } from "lucide-react";
+import { AudioScript } from "@/components/AudioScript";
+import { ArrowLeft, BookA, Languages, Headphones } from "lucide-react";
 
 interface SharedTool {
-  kind: "glossario" | "traduzione";
+  kind: "glossario" | "traduzione" | "ripasso_audio";
   language: string | null;
   body: string;
 }
@@ -26,8 +27,9 @@ export default function StudioStrumenti() {
     queryFn: () => customFetch<{ tools: SharedTool[] }>(`/api/materials/${materialId}/shared-tools`, { responseType: "json" }),
   });
   const tools = data?.tools ?? [];
-  // Il glossario prima della traduzione.
-  const sorted = [...tools].sort((a, b) => a.kind.localeCompare(b.kind));
+  // Prima il ripasso da ascoltare, poi il glossario, poi la traduzione.
+  const ORDER = { ripasso_audio: 0, glossario: 1, traduzione: 2 };
+  const sorted = [...tools].sort((a, b) => ORDER[a.kind] - ORDER[b.kind]);
 
   return (
     <StudentLayout>
@@ -52,8 +54,18 @@ export default function StudioStrumenti() {
             <Card key={t.kind}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  {t.kind === "glossario" ? <BookA className="h-5 w-5 text-secondary" /> : <Languages className="h-5 w-5 text-secondary" />}
-                  {t.kind === "glossario" ? "Glossario" : `Sintesi in ${t.language?.toLowerCase() ?? "un'altra lingua"}`}
+                  {t.kind === "glossario" ? (
+                    <BookA className="h-5 w-5 text-secondary" />
+                  ) : t.kind === "ripasso_audio" ? (
+                    <Headphones className="h-5 w-5 text-secondary" />
+                  ) : (
+                    <Languages className="h-5 w-5 text-secondary" />
+                  )}
+                  {t.kind === "glossario"
+                    ? "Glossario"
+                    : t.kind === "ripasso_audio"
+                      ? "Ripasso da ascoltare"
+                      : `Sintesi in ${t.language?.toLowerCase() ?? "un'altra lingua"}`}
                 </CardTitle>
                 {t.kind === "traduzione" && (
                   <p className="text-xs text-muted-foreground">
@@ -61,9 +73,15 @@ export default function StudioStrumenti() {
                   </p>
                 )}
               </CardHeader>
-              <CardContent className="whitespace-pre-wrap text-sm leading-relaxed" dir="auto">
-                {t.body}
-              </CardContent>
+              {t.kind === "ripasso_audio" ? (
+                <CardContent>
+                  <AudioScript body={t.body} />
+                </CardContent>
+              ) : (
+                <CardContent className="whitespace-pre-wrap text-sm leading-relaxed" dir="auto">
+                  {t.body}
+                </CardContent>
+              )}
             </Card>
           ))
         )}

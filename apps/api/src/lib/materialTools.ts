@@ -3,11 +3,11 @@
  * le regole che non dipendono dal database: quali strumenti esistono, quali
  * si possono condividere con gli studenti, in quali lingue si traduce.
  */
-export const TOOL_KINDS = ["errori_tipici", "spunti", "glossario", "traduzione"] as const;
+export const TOOL_KINDS = ["errori_tipici", "spunti", "glossario", "traduzione", "ripasso_audio"] as const;
 export type ToolKind = (typeof TOOL_KINDS)[number];
 
 /** Solo questi arrivano agli studenti, e solo se il docente lo decide. */
-export const SHAREABLE_KINDS: ReadonlySet<ToolKind> = new Set(["glossario", "traduzione"]);
+export const SHAREABLE_KINDS: ReadonlySet<ToolKind> = new Set(["glossario", "traduzione", "ripasso_audio"]);
 
 export const TRANSLATION_LANGUAGES = [
   "Inglese",
@@ -41,4 +41,11 @@ export const TOOL_INSTRUCTIONS: Record<ToolKind, string> = {
     "Scrivi una sintesi fedele del materiale (10-15 frasi brevi) nella lingua indicata, per uno studente arrivato da poco in Italia " +
     "o per la sua famiglia. Poi aggiungi un elenco bilingue dei 10 termini piu' importanti (italiano = traduzione). " +
     "Non aggiungere contenuti che nel materiale non ci sono.",
+  ripasso_audio:
+    "Scrivi il copione di un ripasso DA ASCOLTARE, di tre o quattro minuti (400-550 parole), che uno studente sentira' letto ad alta voce dal telefono mentre ripassa a casa. " +
+    "Dividilo in 4-6 parti brevi; ogni parte comincia con una riga di titolo che inizia con \"## \". " +
+    "Scrivi come si parla: frasi corte, un'idea per volta, tono diretto (dai del tu), con richiami come \"ricorda\" e \"attenzione\". " +
+    "Niente elenchi puntati, tabelle, simboli o abbreviazioni: numeri, formule e sigle vanno scritti come si pronunciano. " +
+    "L'ultima parte si intitola \"## Prova tu\" e contiene tre domande a cui rispondere a mente. " +
+    "Usa solo cio' che c'e' nel materiale: e' un ripasso, non una lezione nuova.",
 };

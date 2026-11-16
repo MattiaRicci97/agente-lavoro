@@ -7,10 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AudioScript } from "@/components/AudioScript";
 import { useToast } from "@/hooks/use-toast";
-import { Wrench, Sparkles, Loader2, Trash2, AlertTriangle, Lightbulb, BookA, Languages, type LucideIcon } from "lucide-react";
+import { Wrench, Sparkles, Loader2, Trash2, AlertTriangle, Lightbulb, BookA, Languages, Headphones, type LucideIcon } from "lucide-react";
 
-type Kind = "errori_tipici" | "spunti" | "glossario" | "traduzione";
+type Kind = "errori_tipici" | "spunti" | "glossario" | "traduzione" | "ripasso_audio";
 
 interface Tool {
   kind: Kind;
@@ -25,6 +26,7 @@ const TOOLS: Array<{ kind: Kind; title: string; hint: string; icon: LucideIcon; 
   { kind: "spunti", title: "Spunti per iniziare", hint: "Tre modi per aprire la lezione in cinque minuti. Solo per te.", icon: Lightbulb, shareable: false },
   { kind: "glossario", title: "Glossario", hint: "I termini chiave con una definizione breve. Puoi condividerlo con la classe.", icon: BookA, shareable: true },
   { kind: "traduzione", title: "Sintesi tradotta", hint: "Per studenti arrivati da poco e per le famiglie. Puoi condividerla con la classe.", icon: Languages, shareable: true },
+  { kind: "ripasso_audio", title: "Ripasso da ascoltare", hint: "Un copione di tre o quattro minuti che la classe ascolta a casa, letto dal telefono. Puoi condividerlo.", icon: Headphones, shareable: true },
 ];
 
 function ToolRow({
@@ -149,6 +151,14 @@ function ToolRow({
       {open && (
         <div className="mt-2 space-y-2">
           <Textarea value={body} onChange={(e) => setBody(e.target.value)} className="min-h-[200px] text-xs leading-relaxed" />
+          {spec.kind === "ripasso_audio" && body.trim() && (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">
+                Ascoltalo prima di condividerlo: ogni riga che comincia con ## apre una nuova parte.
+              </p>
+              <AudioScript body={body} compact />
+            </div>
+          )}
           {spec.shareable && (
             <label className="flex items-start gap-2 text-xs">
               <Switch checked={shared} onCheckedChange={setShared} className="mt-0.5" />
