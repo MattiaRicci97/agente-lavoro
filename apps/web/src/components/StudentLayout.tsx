@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import { useInstitutionProfile } from "@/lib/institutionProfile";
 import { LogOut, BookMarked, CalendarClock, UserCircle, PiggyBank, ScanLine, Megaphone, MessagesSquare } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -46,6 +47,7 @@ function NavLink({
 export function StudentLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { signOut } = useAuth();
+  const { shows } = useInstitutionProfile();
 
   const { data: unread } = useQuery({
     queryKey: ["unreadPosts"],
@@ -58,7 +60,7 @@ export function StudentLayout({ children }: { children: React.ReactNode }) {
     { href: "/studio/corso", icon: MessagesSquare, label: "Chiedi al corso", short: "Corso", active: location === "/studio/corso" },
     { href: "/studio/ripasso", icon: CalendarClock, label: "Ripasso", active: location === "/studio/ripasso" || location === "/studio/lampo" },
     { href: "/studio/foto", icon: ScanLine, label: "Correggi", active: location === "/studio/foto" },
-    { href: "/studio/finanza", icon: PiggyBank, label: "Finanza", active: location.startsWith("/studio/finanza") },
+    ...(shows("edfin") ? [{ href: "/studio/finanza", icon: PiggyBank, label: "Finanza", active: location.startsWith("/studio/finanza") }] : []),
     { href: "/studio/profilo", icon: UserCircle, label: "Profilo", active: location === "/studio/profilo" },
   ];
 

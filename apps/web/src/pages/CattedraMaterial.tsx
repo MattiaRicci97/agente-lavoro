@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useInstitutionProfile } from "@/lib/institutionProfile";
 import { createPortal } from "react-dom";
 import { useParams } from "wouter";
 import {
@@ -93,6 +94,7 @@ function PrintableExamView({ exam, onClose }: { exam: PrintableExam; onClose: ()
 }
 
 export default function CattedraMaterial() {
+  const { shows } = useInstitutionProfile();
   const { id } = useParams();
   const materialId = parseInt(id || "0");
   const { toast } = useToast();
@@ -419,6 +421,7 @@ export default function CattedraMaterial() {
                     </Button>
                   ))}
                 </div>
+{shows("maturita") && (
                 <div className="rounded-md border p-3 space-y-2">
                   <div className="text-xs font-medium">Simulazione della prima prova di Maturità</div>
                   <p className="text-xs text-muted-foreground">
@@ -439,6 +442,7 @@ export default function CattedraMaterial() {
                     ))}
                   </div>
                 </div>
+                )}
                 <div className="rounded-md border border-dashed p-3 space-y-2">
                   <div className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <Printer className="h-3.5 w-3.5" />

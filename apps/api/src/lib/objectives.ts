@@ -4,12 +4,14 @@ import {
   classesTable,
   classTeachersTable,
   institutionMembersTable,
+  institutionsTable,
   learningObjectivesTable,
   learningObjectivePrerequisitesTable,
   institutionObjectiveOverridesTable,
   type LearningObjective,
   type InstitutionObjectiveOverride,
 } from "@sillabo/db";
+import { usesNationalCatalog } from "./institutionProfile";
 
 /**
  * La mappa degli obiettivi come la vede un istituto.
@@ -146,8 +148,17 @@ export async function effectiveObjectives(
     filter.gradeLevel ? eq(learningObjectivesTable.gradeLevel, filter.gradeLevel) : undefined,
   ].filter((c): c is NonNullable<typeof c> => !!c);
 
+  // Il catalogo base segue le Indicazioni nazionali: vale per le scuole. Un
+  // istituto che non e' una scuola (universita', business school) lavora solo
+  // con gli obiettivi che si scrive.
+  const kinds = institutionIds.length
+    ? (await db.select({ kind: institutionsTable.kind }).from(institutionsTable).where(inArray(institutionsTable.id, institutionIds))).map((r) => r.kind)
+    : [];
+  const withBase = usesNationalCatalog(kinds);
   const ownership = institutionIds.length
-    ? or(isNull(learningObjectivesTable.institutionId), inArray(learningObjectivesTable.institutionId, institutionIds))!
+    ? withBase
+      ? or(isNull(learningObjectivesTable.institutionId), inArray(learningObjectivesTable.institutionId, institutionIds))!
+      : inArray(learningObjectivesTable.institutionId, institutionIds)
     : isNull(learningObjectivesTable.institutionId);
 
   const rows = await db

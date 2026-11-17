@@ -10,6 +10,11 @@ export const institutionsTable = pgTable("institutions", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   city: text("city").notNull(),
+  /**
+   * Il tipo di istituto: "scuola" | "universita" | "business_school".
+   * Decide quali funzioni compaiono e con quali parole (classe o corso).
+   */
+  kind: text("kind").notNull().default("scuola"),
   /** "prova" (self-serve) | "istituto" (licenza acquistata) */
   plan: text("plan").notNull().default("prova"),
   /** Posti docente disponibili; null = illimitati. */

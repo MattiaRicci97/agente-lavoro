@@ -30,6 +30,7 @@ import { useAuth } from "@/lib/auth";
 import { useListJoinRequests, customFetch } from "@sillabo/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { useInstitutionProfile } from "@/lib/institutionProfile";
 
 function NavItem({
   href,
@@ -73,6 +74,8 @@ function NavItem({
 export function TeacherLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { signOut } = useAuth();
+  const { shows, terms } = useInstitutionProfile();
+  const myGroups = terms.group === "corso" ? "I miei corsi" : "Le mie classi";
   const { data: requests } = useListJoinRequests();
   const pendingCount = requests?.filter((r) => r.status === "pending").length ?? 0;
 
@@ -124,10 +127,12 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
             Insegnamento
           </div>
           <NavItem href="/cattedra" icon={BarChart3} label="Panoramica" active={location === "/cattedra"} />
-          <NavItem href="/cattedra/classi" icon={GraduationCap} label="Le mie classi" active={location === "/cattedra/classi"} />
+          <NavItem href="/cattedra/classi" icon={GraduationCap} label={myGroups} active={location === "/cattedra/classi"} />
           <NavItem href="/cattedra/bacheca" icon={Megaphone} label="Bacheca" active={location === "/cattedra/bacheca"} />
-          <NavItem href="/cattedra/registro" icon={ClipboardList} label="Registro" active={location.startsWith("/cattedra/registro")} />
-          <NavItem href="/cattedra/scrutinio" icon={Gavel} label="Scrutinio" active={location === "/cattedra/scrutinio"} />
+          {shows("registro") && (
+            <NavItem href="/cattedra/registro" icon={ClipboardList} label="Registro" active={location.startsWith("/cattedra/registro")} />
+          )}
+          {shows("scrutinio") && <NavItem href="/cattedra/scrutinio" icon={Gavel} label="Scrutinio" active={location === "/cattedra/scrutinio"} />}
           <NavItem href="/cattedra/obiettivi" icon={Target} label="Obiettivi" active={location === "/cattedra/obiettivi"} />
           <NavItem
             href="/cattedra/validazioni"
@@ -137,9 +142,11 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
             badge={toValidateCount}
           />
           <NavItem href="/cattedra/recupero" icon={LifeBuoy} label="Recupero" active={location === "/cattedra/recupero"} />
-          <NavItem href="/cattedra/mappa" icon={Grid3x3} label="Mappa della classe" active={location === "/cattedra/mappa"} />
+          <NavItem href="/cattedra/mappa" icon={Grid3x3} label={`Mappa ${terms.group === "corso" ? "del corso" : "della classe"}`} active={location === "/cattedra/mappa"} />
           <NavItem href="/cattedra/attivita" icon={Compass} label="Attività guidate" active={location === "/cattedra/attivita"} />
-          <NavItem href="/cattedra/invalsi" icon={ListChecks} label="Allenamento INVALSI" active={location === "/cattedra/invalsi"} />
+          {shows("invalsi") && (
+            <NavItem href="/cattedra/invalsi" icon={ListChecks} label="Allenamento INVALSI" active={location === "/cattedra/invalsi"} />
+          )}
           <NavItem href="/cattedra/assistente" icon={Sparkles} label="Assistente" active={location === "/cattedra/assistente"} />
 
           <div className="px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
@@ -148,7 +155,7 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
           <NavItem href="/cattedra/istituto" icon={Building2} label="Istituto" active={location === "/cattedra/istituto"} />
           <NavItem href="/cattedra/efficacia" icon={LineChart} label="Efficacia" active={location === "/cattedra/efficacia"} />
           <NavItem href="/cattedra/licenza" icon={KeyRound} label="Licenza e utenze" active={location === "/cattedra/licenza"} />
-          <NavItem href="/cattedra/moduli" icon={LayoutGrid} label="Moduli" active={location === "/cattedra/moduli"} />
+          {shows("moduli") && <NavItem href="/cattedra/moduli" icon={LayoutGrid} label="Moduli" active={location === "/cattedra/moduli"} />}
           <NavItem
             href="/cattedra/richieste"
             icon={Inbox}

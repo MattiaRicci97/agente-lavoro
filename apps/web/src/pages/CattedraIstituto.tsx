@@ -1,5 +1,7 @@
 import { useListInstitutions, useGetInstitutionDashboard, getGetInstitutionDashboardQueryKey, useListClasses, useListStudents } from "@sillabo/api-client-react";
 import { TeacherLayout } from "@/components/TeacherLayout";
+import { InstitutionKindCard } from "@/components/InstitutionKindCard";
+import { useInstitutionProfile, capitalize as cap } from "@/lib/institutionProfile";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +37,7 @@ function ClassRoster({ classId, className }: { classId: number; className: strin
 }
 
 export default function CattedraIstituto() {
+  const { terms: t } = useInstitutionProfile();
   const { data: institutions, isLoading: institutionsLoading } = useListInstitutions();
   const institutionId = institutions?.[0]?.id;
 
@@ -71,6 +74,9 @@ export default function CattedraIstituto() {
             <h3 className="text-lg font-medium">Nessun istituto configurato</h3>
             <p className="text-muted-foreground">Configura un istituto per vedere la vista del dirigente scolastico.</p>
           </div>
+          <div className="mt-8">
+            <InstitutionKindCard />
+          </div>
         </div>
       </TeacherLayout>
     );
@@ -81,13 +87,15 @@ export default function CattedraIstituto() {
       <div className="p-8 max-w-6xl mx-auto space-y-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{dashboard.institutionName}</h1>
-          <p className="text-muted-foreground mt-1">Vista aggregata del dirigente scolastico su tutte le classi.</p>
+          <p className="text-muted-foreground mt-1">{t.group === "corso" ? `Vista aggregata su tutti i ${t.groups}.` : "Vista aggregata del dirigente scolastico su tutte le classi."}</p>
         </div>
+
+        <InstitutionKindCard />
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Classi</CardTitle>
+              <CardTitle className="text-sm font-medium">{cap(t.groups)}</CardTitle>
               <GraduationCap className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -96,7 +104,7 @@ export default function CattedraIstituto() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Studenti</CardTitle>
+              <CardTitle className="text-sm font-medium">{cap(t.learners)}</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -127,8 +135,8 @@ export default function CattedraIstituto() {
           <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Andamento per classe</CardTitle>
-                <CardDescription>Confronto tra le classi dell'istituto</CardDescription>
+                <CardTitle>Andamento per {t.group}</CardTitle>
+                <CardDescription>Confronto tra {t.group === "corso" ? "i corsi" : "le classi"} dell'istituto</CardDescription>
               </CardHeader>
               <CardContent>
                 {!dashboard.classBreakdown.length ? (
@@ -160,7 +168,7 @@ export default function CattedraIstituto() {
             <Card>
               <CardHeader>
                 <CardTitle>Mappa delle lacune di istituto</CardTitle>
-                <CardDescription>Argomenti più critici in tutte le classi</CardDescription>
+                <CardDescription>Argomenti più critici in tutti {t.group === "corso" ? "i corsi" : "le classi"}</CardDescription>
               </CardHeader>
               <CardContent>
                 {!dashboard.topicGaps.length ? (
@@ -208,7 +216,7 @@ export default function CattedraIstituto() {
         </div>
 
         <div className="space-y-4">
-          <h2 className="text-xl font-semibold tracking-tight">Classi e studenti</h2>
+          <h2 className="text-xl font-semibold tracking-tight">{cap(t.groups)} e {t.learners}</h2>
           {classesLoading ? (
             <Skeleton className="h-32 w-full" />
           ) : !classes?.length ? (

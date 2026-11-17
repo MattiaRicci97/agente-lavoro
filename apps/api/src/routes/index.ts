@@ -34,6 +34,7 @@ import agendaRouter from "./agenda";
 import materialToolsRouter from "./materialTools";
 import invalsiRouter from "./invalsi";
 import participationRouter from "./participation";
+import institutionProfileRouter from "./institutionProfile";
 
 const router: IRouter = Router();
 
@@ -72,5 +73,6 @@ router.use(agendaRouter);
 router.use(materialToolsRouter);
 router.use(invalsiRouter);
 router.use(participationRouter);
+router.use(institutionProfileRouter);
 
 export default router;

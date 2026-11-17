@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useInstitutionProfile } from "@/lib/institutionProfile";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch, useListClasses } from "@sillabo/api-client-react";
@@ -171,6 +172,7 @@ function ObjectivePanel({ classId, o, names }: { classId: number; o: MapObjectiv
 }
 
 export default function CattedraMappa() {
+  const { terms } = useInstitutionProfile();
   const { data: classes, isLoading: classesLoading } = useListClasses();
   const [classId, setClassId] = useState<number | null>(null);
   const [subject, setSubject] = useState<string | null>(null);
@@ -192,7 +194,7 @@ export default function CattedraMappa() {
       <div className="p-8 max-w-6xl mx-auto space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Grid3x3 className="h-7 w-7 text-primary" /> Mappa della classe
+            <Grid3x3 className="h-7 w-7 text-primary" /> Mappa {terms.group === "corso" ? "del corso" : "della classe"}
           </h1>
           <p className="text-muted-foreground mt-1 max-w-2xl">
             Obiettivo per obiettivo, a che punto e' ciascuno secondo le verifiche che hai firmato. I colori parlano
