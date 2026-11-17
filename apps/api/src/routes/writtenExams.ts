@@ -33,6 +33,7 @@ import {
   diagnosisForSources,
   deleteDiagnosisForSources,
 } from "../lib/diagnosis";
+import { scaleForClass } from "../lib/gradeScale";
 
 const router: IRouter = Router();
 
@@ -159,7 +160,7 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
       .where(
         and(
           inArray(writtenExamSubmissionsTable.examId, examIds),
-          eq(writtenExamSubmissionsTable.validationStatus, "da_validare"),
+          inArray(writtenExamSubmissionsTable.validationStatus, ["da_validare", "da_confermare"]),
         ),
       )
       .groupBy(writtenExamSubmissionsTable.examId);
@@ -222,7 +223,9 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
               answer: sub.answer,
               audioObjectPath: sub.audioObjectPath,
               audioSeconds: sub.audioSeconds,
-              status: sub.validationStatus,
+              // La correzione preparata da un tutor, per lo studente, e' ancora in corso.
+              status: sub.validationStatus === "da_confermare" ? "da_validare" : sub.validationStatus,
+              gradeScale: sub.gradeScale,
               // Prima del visto lo studente non riceve nessun voto.
               grade: sub.validationStatus === "validata" ? sub.teacherGrade : null,
               feedback: sub.validationStatus === "validata" ? sub.teacherFeedback : null,
@@ -503,6 +506,7 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
         authUserId: req.authUserId!,
         studentName: student.name,
         classId: student.classId,
+        gradeScale: await scaleForClass(student.classId),
         answer: parsed.data.studentAnswer || SPOKEN_ANSWER_PLACEHOLDER,
         audioObjectPath: parsed.data.audioObjectPath!,
         audioSeconds: parsed.data.audioSeconds ?? null,
@@ -550,6 +554,7 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
       authUserId: req.authUserId!,
       studentName: student.name,
       classId: student.classId,
+      gradeScale: await scaleForClass(student.classId),
       answer: parsed.data.studentAnswer,
       aiGrade: typeof grade === "number" ? Math.round(grade) : null,
       aiFeedback: feedback ?? "",

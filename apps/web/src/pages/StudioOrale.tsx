@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { asScale, formatGrade, fromTenths } from "@/lib/gradeScale";
 import { useParams, Link } from "wouter";
 import {
   useGetMaterial,
@@ -177,6 +178,7 @@ export default function StudioOrale() {
 
   const isCompleted = session.status === "completata";
   const isValidated = session.validationStatus === "validata";
+  const oralScale = asScale((session as { gradeScale?: string }).gradeScale);
 
   return (
     <StudentLayout>
@@ -210,7 +212,9 @@ export default function StudioOrale() {
                   isValidated ? "bg-green-100 text-green-800" : "bg-amber-50 text-amber-800 border border-amber-200"
                 }`}
               >
-                {isValidated ? `Voto del prof: ${session.teacherGrade ?? "—"}/10` : `Proposta: ${session.grade}/10`}
+                {isValidated
+                  ? `Voto del prof: ${formatGrade((session as { teacherGrade?: number | null }).teacherGrade, oralScale)}`
+                  : `Proposta: ${formatGrade(fromTenths(session.grade, oralScale), oralScale)}`}
               </div>
             )}
           </div>

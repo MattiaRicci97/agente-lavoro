@@ -34,7 +34,7 @@ export const writtenExamSubmissionsTable = pgTable(
     aiRubricScores: jsonb("ai_rubric_scores").$type<RubricScore[]>(),
     /** Punteggi per criterio firmati dal docente: gli unici che lo studente vede. */
     teacherRubricScores: jsonb("teacher_rubric_scores").$type<RubricScore[]>(),
-    /** "da_validare" | "validata" */
+    /** "da_validare" | "da_confermare" (preparata da un tutor) | "validata" */
     validationStatus: text("validation_status").notNull().default("da_validare"),
     teacherGrade: integer("teacher_grade"),
     teacherFeedback: text("teacher_feedback"),
@@ -42,6 +42,16 @@ export const writtenExamSubmissionsTable = pgTable(
       onDelete: "set null",
     }),
     validatedAt: timestamp("validated_at", { withTimezone: true }),
+    /**
+     * La scala in cui e' espresso il voto del docente ("decimi" | "trentesimi" |
+     * "centesimi"), fissata alla consegna da quella dell'istituto. Le proposte
+     * dell'assistente restano in decimi e si convertono solo per mostrarle.
+     */
+    gradeScale: text("grade_scale").notNull().default("decimi"),
+    /** Il tutor che ha preparato la correzione, confermata poi dal docente titolare. */
+    preparedByTeacherId: integer("prepared_by_teacher_id").references(() => teachersTable.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique("written_exam_submissions_unique").on(t.examId, t.authUserId)],

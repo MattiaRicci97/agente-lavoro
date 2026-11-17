@@ -5,7 +5,7 @@ import { useInstitutionProfile, capitalize as cap } from "@/lib/institutionProfi
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, BookOpen, AlertTriangle, GraduationCap } from "lucide-react";
+import { Building2, Users, BookOpen, GraduationCap } from "lucide-react";
 import { useState } from "react";
 
 function ClassRoster({ classId, className }: { classId: number; className: string }) {
@@ -131,8 +131,8 @@ export default function CattedraIstituto() {
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 gap-6">
+          <div className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Andamento per {t.group}</CardTitle>
@@ -150,12 +150,6 @@ export default function CattedraIstituto() {
                           <div className="text-xs text-muted-foreground">{c.studentsCount} studenti</div>
                         </div>
                         <div className="flex items-center gap-4">
-                          {c.atRiskCount > 0 && (
-                            <span className="flex items-center gap-1 text-xs text-destructive font-medium">
-                              <AlertTriangle className="h-3.5 w-3.5" />
-                              {c.atRiskCount} a rischio
-                            </span>
-                          )}
                           <div className="text-sm font-semibold w-14 text-right">{c.averageQuizScorePercent}%</div>
                         </div>
                       </div>
@@ -190,29 +184,6 @@ export default function CattedraIstituto() {
             </Card>
           </div>
 
-          <div className="space-y-6">
-            <Card className="border-destructive/20 bg-destructive/5">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2 text-destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  Studenti a rischio
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!dashboard.atRiskStudents.length ? (
-                  <div className="text-sm text-muted-foreground">Nessuno studente a rischio rilevato.</div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {dashboard.atRiskStudents.map((name, i) => (
-                      <span key={i} className="px-2 py-1 bg-destructive/10 text-destructive text-xs font-medium rounded-md">
-                        {name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
         </div>
 
         <div className="space-y-4">

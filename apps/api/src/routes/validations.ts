@@ -11,9 +11,11 @@ import {
   oralSessionsTable,
   writtenExamsTable,
   writtenExamSubmissionsTable,
+  teachersTable,
 } from "@sillabo/db";
 import { requireTeacher } from "../middlewares/auth";
-import { teacherClassIds } from "../lib/classAccess";
+import { teacherClassRoles, TUTOR_ROLE } from "../lib/classAccess";
+import { isGradeScale, isValidGrade, SCALE_RANGE, formatGrade, type GradeScale } from "../lib/gradeScale";
 import {
   diagnosisForSources,
   validateDiagnosis,
@@ -56,6 +58,72 @@ async function afterSignature(
 
 const router: IRouter = Router();
 
+/**
+ * Chi firma e come. Il docente titolare (docente o coordinatore) firma e la
+ * correzione arriva allo studente. Il tutor la prepara: resta "da confermare"
+ * finche' un titolare non la conferma, e allo studente non arriva nulla.
+ */
+type SignPlan =
+  | { ok: false; status: number; error: string }
+  | { ok: true; byTutor: boolean; skipDiagnosis: boolean; patch: Record<string, unknown> };
+
+function planSignature(input: {
+  role: string | undefined;
+  teacherId: number;
+  currentStatus: string;
+  scale: string;
+  grade: number | null;
+  feedback: string;
+  decisions: number;
+}): SignPlan {
+  if (!input.role) return { ok: false, status: 404, error: "Non trovato" };
+  const scale: GradeScale = isGradeScale(input.scale) ? input.scale : "decimi";
+  if (input.grade !== null && !isValidGrade(input.grade, scale)) {
+    const r = SCALE_RANGE[scale];
+    return { ok: false, status: 400, error: `Il voto va da ${formatGrade(r.min, scale)} a ${formatGrade(r.max, scale)}` };
+  }
+  const byTutor = input.role === TUTOR_ROLE;
+  if (byTutor) {
+    if (input.currentStatus === "validata") {
+      return { ok: false, status: 409, error: "Questa correzione è già stata firmata dal docente" };
+    }
+    return {
+      ok: true,
+      byTutor,
+      skipDiagnosis: false,
+      patch: {
+        validationStatus: "da_confermare",
+        teacherGrade: input.grade,
+        teacherFeedback: input.feedback,
+        preparedByTeacherId: input.teacherId,
+      },
+    };
+  }
+  return {
+    ok: true,
+    byTutor,
+    // Confermando cio' che ha preparato il tutor, la sua diagnosi resta com'e'.
+    skipDiagnosis: input.currentStatus === "da_confermare" && input.decisions === 0,
+    patch: {
+      validationStatus: "validata",
+      teacherGrade: input.grade,
+      teacherFeedback: input.feedback,
+      validatedByTeacherId: input.teacherId,
+      validatedAt: new Date(),
+    },
+  };
+}
+
+/** I nomi dei tutor che hanno preparato le correzioni. */
+async function tutorNames(ids: Array<number | null>): Promise<Map<number, string>> {
+  const wanted = Array.from(new Set(ids.filter((id): id is number => id !== null)));
+  if (!wanted.length) return new Map();
+  const rows = await db.select({ id: teachersTable.id, name: teachersTable.name }).from(teachersTable).where(inArray(teachersTable.id, wanted));
+  return new Map(rows.map((r) => [r.id, r.name]));
+}
+
+const PENDING = ["da_validare", "da_confermare"];
+
 const DecisionSchema = z.object({
   id: z.number().int().positive(),
   objectiveId: z.number().int().positive().nullable().optional(),
@@ -65,7 +133,8 @@ const DecisionSchema = z.object({
 });
 
 const ValidateSchema = z.object({
-  grade: z.number().int().min(1).max(10).nullable(),
+  /** Nella scala dell'istituto: decimi, trentesimi (31 = 30 e lode) o centesimi. */
+  grade: z.number().int().min(0).max(100).nullable(),
   feedback: z.string().trim().max(4000).optional().default(""),
   /** Correzioni alla diagnosi: le righe non citate vengono confermate come proposte. */
   diagnosis: z.array(DecisionSchema).max(60).optional().default([]),
@@ -112,111 +181,153 @@ async function applyDiagnosis(
 /**
  * Proposte di valutazione in attesa del visto del docente.
  * L'AI prepara, il docente decide: finché non firma, per lo studente non è
- * una valutazione ufficiale.
+ * una valutazione ufficiale. Il titolare vede anche le correzioni preparate
+ * dai tutor, da confermare; il tutor vede solo quelle ancora da preparare.
  */
 router.get("/validations/pending", requireTeacher, async (req, res): Promise<void> => {
-  const classIds = await teacherClassIds(req.teacher!.id);
+  const roles = await teacherClassRoles(req.teacher!.id);
+  const classIds = Array.from(roles.keys());
   if (!classIds.length) {
     res.json({ photoCorrections: [], oralSessions: [], writtenSubmissions: [], total: 0 });
     return;
   }
+  /** Il titolare vede tutto; il tutor non vede cio' che aspetta un titolare. */
+  const visible = (classId: number | null, status: string) =>
+    classId !== null && roles.has(classId) && !(status === "da_confermare" && roles.get(classId) === TUTOR_ROLE);
+  const signer = (classId: number | null) => (classId !== null && roles.get(classId) === TUTOR_ROLE ? "tutor" : "docente");
 
-  const photos = await db
-    .select({
-      id: photoCorrectionsTable.id,
-      studentName: photoCorrectionsTable.studentName,
-      subject: photoCorrectionsTable.subject,
-      gradeLevel: photoCorrectionsTable.gradeLevel,
-      classId: photoCorrectionsTable.classId,
-      materialId: photoCorrectionsTable.materialId,
-      assignmentPrompt: photoCorrectionsTable.assignmentPrompt,
-      imageObjectPath: photoCorrectionsTable.imageObjectPath,
-      transcription: photoCorrectionsTable.transcription,
-      grade: photoCorrectionsTable.grade,
-      feedback: photoCorrectionsTable.feedback,
-      strengths: photoCorrectionsTable.strengths,
-      improvements: photoCorrectionsTable.improvements,
-      createdAt: photoCorrectionsTable.createdAt,
-      className: classesTable.name,
-    })
-    .from(photoCorrectionsTable)
-    .innerJoin(classesTable, eq(classesTable.id, photoCorrectionsTable.classId))
-    .where(
-      and(
-        inArray(photoCorrectionsTable.classId, classIds),
-        eq(photoCorrectionsTable.validationStatus, "da_validare"),
-      ),
-    )
-    .orderBy(desc(photoCorrectionsTable.createdAt))
-    .limit(50);
+  const photos = (
+    await db
+      .select({
+        id: photoCorrectionsTable.id,
+        studentName: photoCorrectionsTable.studentName,
+        subject: photoCorrectionsTable.subject,
+        gradeLevel: photoCorrectionsTable.gradeLevel,
+        classId: photoCorrectionsTable.classId,
+        materialId: photoCorrectionsTable.materialId,
+        assignmentPrompt: photoCorrectionsTable.assignmentPrompt,
+        imageObjectPath: photoCorrectionsTable.imageObjectPath,
+        transcription: photoCorrectionsTable.transcription,
+        grade: photoCorrectionsTable.grade,
+        feedback: photoCorrectionsTable.feedback,
+        strengths: photoCorrectionsTable.strengths,
+        improvements: photoCorrectionsTable.improvements,
+        createdAt: photoCorrectionsTable.createdAt,
+        className: classesTable.name,
+        validationStatus: photoCorrectionsTable.validationStatus,
+        gradeScale: photoCorrectionsTable.gradeScale,
+        teacherGrade: photoCorrectionsTable.teacherGrade,
+        teacherFeedback: photoCorrectionsTable.teacherFeedback,
+        preparedByTeacherId: photoCorrectionsTable.preparedByTeacherId,
+      })
+      .from(photoCorrectionsTable)
+      .innerJoin(classesTable, eq(classesTable.id, photoCorrectionsTable.classId))
+      .where(and(inArray(photoCorrectionsTable.classId, classIds), inArray(photoCorrectionsTable.validationStatus, PENDING)))
+      .orderBy(desc(photoCorrectionsTable.createdAt))
+      .limit(50)
+  ).filter((p) => visible(p.classId, p.validationStatus));
 
   // Interrogazioni completate sui materiali assegnati alle classi del docente.
   const links = await db
-    .select({ materialId: materialClassesTable.materialId })
+    .select({ materialId: materialClassesTable.materialId, classId: materialClassesTable.classId })
     .from(materialClassesTable)
     .where(inArray(materialClassesTable.classId, classIds));
   const materialIds = Array.from(new Set(links.map((l) => l.materialId)));
+  /** Per le consegne nate prima che si salvasse la classe: la prima classe del docente col materiale. */
+  const fallbackClass = new Map<number, number>();
+  for (const l of links) if (!fallbackClass.has(l.materialId)) fallbackClass.set(l.materialId, l.classId);
 
-  const orals = materialIds.length
-    ? await db
-        .select({
-          id: oralSessionsTable.id,
-          materialId: oralSessionsTable.materialId,
-          studentName: oralSessionsTable.studentName,
-          grade: oralSessionsTable.grade,
-          feedback: oralSessionsTable.feedback,
-          createdAt: oralSessionsTable.createdAt,
-          materialTitle: materialsTable.title,
-          subject: materialsTable.subject,
-        })
-        .from(oralSessionsTable)
-        .innerJoin(materialsTable, eq(materialsTable.id, oralSessionsTable.materialId))
-        .where(
-          and(
-            inArray(oralSessionsTable.materialId, materialIds),
-            eq(oralSessionsTable.status, "completata"),
-            eq(oralSessionsTable.validationStatus, "da_validare"),
-          ),
-        )
-        .orderBy(desc(oralSessionsTable.createdAt))
-        .limit(50)
-    : [];
+  const orals = (
+    materialIds.length
+      ? await db
+          .select({
+            id: oralSessionsTable.id,
+            materialId: oralSessionsTable.materialId,
+            classId: oralSessionsTable.classId,
+            studentName: oralSessionsTable.studentName,
+            grade: oralSessionsTable.grade,
+            feedback: oralSessionsTable.feedback,
+            createdAt: oralSessionsTable.createdAt,
+            materialTitle: materialsTable.title,
+            subject: materialsTable.subject,
+            validationStatus: oralSessionsTable.validationStatus,
+            gradeScale: oralSessionsTable.gradeScale,
+            teacherGrade: oralSessionsTable.teacherGrade,
+            teacherFeedback: oralSessionsTable.teacherFeedback,
+            preparedByTeacherId: oralSessionsTable.preparedByTeacherId,
+          })
+          .from(oralSessionsTable)
+          .innerJoin(materialsTable, eq(materialsTable.id, oralSessionsTable.materialId))
+          .where(
+            and(
+              inArray(oralSessionsTable.materialId, materialIds),
+              eq(oralSessionsTable.status, "completata"),
+              inArray(oralSessionsTable.validationStatus, PENDING),
+            ),
+          )
+          .orderBy(desc(oralSessionsTable.createdAt))
+          .limit(50)
+      : []
+  )
+    .map((o) => ({ ...o, classId: o.classId !== null && roles.has(o.classId) ? o.classId : (fallbackClass.get(o.materialId) ?? null) }))
+    .filter((o) => visible(o.classId, o.validationStatus));
 
   // Compiti scritti consegnati dagli studenti delle classi del docente.
-  const writtenSubmissions = materialIds.length
-    ? await db
-        .select({
-          id: writtenExamSubmissionsTable.id,
-          studentName: writtenExamSubmissionsTable.studentName,
-          answer: writtenExamSubmissionsTable.answer,
-          audioObjectPath: writtenExamSubmissionsTable.audioObjectPath,
-          audioSeconds: writtenExamSubmissionsTable.audioSeconds,
-          grade: writtenExamSubmissionsTable.aiGrade,
-          feedback: writtenExamSubmissionsTable.aiFeedback,
-          createdAt: writtenExamSubmissionsTable.createdAt,
-          examType: writtenExamsTable.examType,
-          prompt: writtenExamsTable.prompt,
-          rubric: writtenExamsTable.rubric,
-          rubricStatus: writtenExamsTable.rubricStatus,
-          aiRubricScores: writtenExamSubmissionsTable.aiRubricScores,
-          materialTitle: materialsTable.title,
-          subject: materialsTable.subject,
-          classId: writtenExamSubmissionsTable.classId,
-          materialId: materialsTable.id,
-          gradeLevel: materialsTable.gradeLevel,
-        })
-        .from(writtenExamSubmissionsTable)
-        .innerJoin(writtenExamsTable, eq(writtenExamsTable.id, writtenExamSubmissionsTable.examId))
-        .innerJoin(materialsTable, eq(materialsTable.id, writtenExamsTable.materialId))
-        .where(
-          and(
-            inArray(writtenExamsTable.materialId, materialIds),
-            eq(writtenExamSubmissionsTable.validationStatus, "da_validare"),
-          ),
-        )
-        .orderBy(desc(writtenExamSubmissionsTable.createdAt))
-        .limit(50)
-    : [];
+  const writtenSubmissions = (
+    materialIds.length
+      ? await db
+          .select({
+            id: writtenExamSubmissionsTable.id,
+            studentName: writtenExamSubmissionsTable.studentName,
+            answer: writtenExamSubmissionsTable.answer,
+            audioObjectPath: writtenExamSubmissionsTable.audioObjectPath,
+            audioSeconds: writtenExamSubmissionsTable.audioSeconds,
+            grade: writtenExamSubmissionsTable.aiGrade,
+            feedback: writtenExamSubmissionsTable.aiFeedback,
+            createdAt: writtenExamSubmissionsTable.createdAt,
+            examType: writtenExamsTable.examType,
+            prompt: writtenExamsTable.prompt,
+            rubric: writtenExamsTable.rubric,
+            rubricStatus: writtenExamsTable.rubricStatus,
+            aiRubricScores: writtenExamSubmissionsTable.aiRubricScores,
+            teacherRubricScores: writtenExamSubmissionsTable.teacherRubricScores,
+            materialTitle: materialsTable.title,
+            subject: materialsTable.subject,
+            classId: writtenExamSubmissionsTable.classId,
+            materialId: materialsTable.id,
+            gradeLevel: materialsTable.gradeLevel,
+            validationStatus: writtenExamSubmissionsTable.validationStatus,
+            gradeScale: writtenExamSubmissionsTable.gradeScale,
+            teacherGrade: writtenExamSubmissionsTable.teacherGrade,
+            teacherFeedback: writtenExamSubmissionsTable.teacherFeedback,
+            preparedByTeacherId: writtenExamSubmissionsTable.preparedByTeacherId,
+          })
+          .from(writtenExamSubmissionsTable)
+          .innerJoin(writtenExamsTable, eq(writtenExamsTable.id, writtenExamSubmissionsTable.examId))
+          .innerJoin(materialsTable, eq(materialsTable.id, writtenExamsTable.materialId))
+          .where(
+            and(
+              inArray(writtenExamsTable.materialId, materialIds),
+              inArray(writtenExamSubmissionsTable.validationStatus, PENDING),
+            ),
+          )
+          .orderBy(desc(writtenExamSubmissionsTable.createdAt))
+          .limit(50)
+      : []
+  )
+    .map((w) => ({ ...w, classId: w.classId !== null && roles.has(w.classId) ? w.classId : (fallbackClass.get(w.materialId) ?? null) }))
+    .filter((w) => visible(w.classId, w.validationStatus));
+
+  const names = await tutorNames([...photos, ...orals, ...writtenSubmissions].map((x) => x.preparedByTeacherId));
+  /** Cosa ha preparato il tutor, se c'e' una correzione da confermare. */
+  const prepared = (x: { validationStatus: string; teacherGrade: number | null; teacherFeedback: string | null; preparedByTeacherId: number | null }) =>
+    x.validationStatus === "da_confermare"
+      ? { tutorName: (x.preparedByTeacherId !== null && names.get(x.preparedByTeacherId)) || "Tutor", grade: x.teacherGrade, feedback: x.teacherFeedback ?? "" }
+      : null;
+  const strip = <T extends { teacherGrade: unknown; teacherFeedback: unknown; preparedByTeacherId: unknown }>(x: T) => {
+    const { teacherGrade: _g, teacherFeedback: _f, preparedByTeacherId: _p, ...rest } = x;
+    return rest;
+  };
 
   // La diagnosi proposta viaggia con la correzione, insieme agli obiettivi
   // tra cui il docente puo' scegliere se vuole correggerla.
@@ -227,7 +338,9 @@ router.get("/validations/pending", requireTeacher, async (req, res): Promise<voi
   const photosOut = [];
   for (const p of photos) {
     photosOut.push({
-      ...p,
+      ...strip(p),
+      signer: signer(p.classId),
+      prepared: prepared(p),
       diagnosis: photoDiagnosis.get(p.id) ?? [],
       objectiveOptions: await objectiveOptionsFor(options, {
         classId: p.classId,
@@ -237,14 +350,19 @@ router.get("/validations/pending", requireTeacher, async (req, res): Promise<voi
       }),
     });
   }
+  const oralsOut = orals.map((o) => ({ ...strip(o), signer: signer(o.classId), prepared: prepared(o) }));
   const writtenOut = [];
   for (const w of writtenSubmissions) {
-    const { rubric, rubricStatus, aiRubricScores, ...rest } = w;
+    const { rubric, rubricStatus, aiRubricScores, teacherRubricScores, ...rest } = w;
     const inForce = rubric && rubricStatus === "approvata" ? rubric : null;
+    const tutorScores = w.validationStatus === "da_confermare" ? teacherRubricScores : null;
     writtenOut.push({
-      ...rest,
+      ...strip(rest),
+      signer: signer(w.classId),
+      prepared: prepared(w),
       rubric: inForce,
-      rubricScores: inForce ? (aiRubricScores ?? []) : [],
+      // Se il tutor ha gia' corretto i punteggi, il titolare parte dai suoi.
+      rubricScores: inForce ? (tutorScores ?? aiRubricScores ?? []) : [],
       rubricSuggestedGrade: inForce ? weightedGrade(inForce, aiRubricScores ?? []) : null,
       diagnosis: writtenDiagnosis.get(w.id) ?? [],
       objectiveOptions: await objectiveOptionsFor(options, {
@@ -258,9 +376,9 @@ router.get("/validations/pending", requireTeacher, async (req, res): Promise<voi
 
   res.json({
     photoCorrections: photosOut,
-    oralSessions: orals,
+    oralSessions: oralsOut,
     writtenSubmissions: writtenOut,
-    total: photos.length + orals.length + writtenSubmissions.length,
+    total: photosOut.length + oralsOut.length + writtenOut.length,
   });
 });
 
@@ -280,10 +398,14 @@ router.post("/written-submissions/:id/validate", requireTeacher, async (req, res
   const [row] = await db
     .select({
       id: writtenExamSubmissionsTable.id,
+      classId: writtenExamSubmissionsTable.classId,
       materialId: writtenExamsTable.materialId,
       rubric: writtenExamsTable.rubric,
       rubricStatus: writtenExamsTable.rubricStatus,
       aiRubricScores: writtenExamSubmissionsTable.aiRubricScores,
+      teacherRubricScores: writtenExamSubmissionsTable.teacherRubricScores,
+      validationStatus: writtenExamSubmissionsTable.validationStatus,
+      gradeScale: writtenExamSubmissionsTable.gradeScale,
     })
     .from(writtenExamSubmissionsTable)
     .innerJoin(writtenExamsTable, eq(writtenExamsTable.id, writtenExamSubmissionsTable.examId))
@@ -294,56 +416,73 @@ router.post("/written-submissions/:id/validate", requireTeacher, async (req, res
   }
 
   // Il materiale dev'essere assegnato a una classe del docente.
-  const classIds = await teacherClassIds(req.teacher!.id);
+  const roles = await teacherClassRoles(req.teacher!.id);
+  const classIds = Array.from(roles.keys());
   const [link] = classIds.length
     ? await db
         .select({ classId: materialClassesTable.classId })
         .from(materialClassesTable)
-        .where(
-          and(
-            eq(materialClassesTable.materialId, row.materialId),
-            inArray(materialClassesTable.classId, classIds),
-          ),
-        )
+        .where(and(eq(materialClassesTable.materialId, row.materialId), inArray(materialClassesTable.classId, classIds)))
     : [];
   if (!link) {
     res.status(404).json({ error: "Consegna non trovata" });
     return;
   }
+  const classId = row.classId !== null && roles.has(row.classId) ? row.classId : link.classId;
 
-  if (!(await applyDiagnosis(res, { sourceKind: "scritto", sourceId: id, teacherId: req.teacher!.id, decisions: parsed.data.diagnosis }))) {
+  const plan = planSignature({
+    role: roles.get(classId),
+    teacherId: req.teacher!.id,
+    currentStatus: row.validationStatus,
+    scale: row.gradeScale,
+    grade: parsed.data.grade,
+    feedback: parsed.data.feedback,
+    decisions: parsed.data.diagnosis.length,
+  });
+  if (!plan.ok) {
+    res.status(plan.status).json({ error: plan.status === 404 ? "Consegna non trovata" : plan.error });
     return;
   }
 
+  if (
+    !plan.skipDiagnosis &&
+    !(await applyDiagnosis(res, { sourceKind: "scritto", sourceId: id, teacherId: req.teacher!.id, decisions: parsed.data.diagnosis }))
+  ) {
+    return;
+  }
+
+  const inForce = row.rubric && row.rubricStatus === "approvata" ? row.rubric : null;
   const [updated] = await db
     .update(writtenExamSubmissionsTable)
     .set({
-      validationStatus: "validata",
-      teacherGrade: parsed.data.grade,
-      teacherFeedback: parsed.data.feedback,
-      // Con la firma i punteggi per criterio diventano del docente.
-      teacherRubricScores:
-        row.rubric && row.rubricStatus === "approvata"
-          ? mergeTeacherScores(row.rubric, row.aiRubricScores ?? [], parsed.data.rubricScores)
-          : null,
-      validatedByTeacherId: req.teacher!.id,
-      validatedAt: new Date(),
+      ...plan.patch,
+      // Con la firma i punteggi per criterio diventano del docente (o del tutor,
+      // da confermare). Chi conferma parte dai punteggi gia' sistemati dal tutor.
+      teacherRubricScores: inForce
+        ? mergeTeacherScores(
+            inForce,
+            (row.validationStatus === "da_confermare" ? row.teacherRubricScores : null) ?? row.aiRubricScores ?? [],
+            parsed.data.rubricScores,
+          )
+        : null,
     })
     .where(eq(writtenExamSubmissionsTable.id, id))
     .returning();
 
-  const [exam] = await db
-    .select({ examType: writtenExamsTable.examType, title: materialsTable.title })
-    .from(writtenExamsTable)
-    .innerJoin(materialsTable, eq(materialsTable.id, writtenExamsTable.materialId))
-    .where(eq(writtenExamsTable.id, updated.examId));
-  await afterSignature(req.log, {
-    classId: updated.classId,
-    sourceKind: "scritto",
-    sourceId: id,
-    examId: updated.examId,
-    title: exam ? `${exam.title} (${exam.examType})` : "Compito scritto",
-  });
+  if (!plan.byTutor) {
+    const [exam] = await db
+      .select({ examType: writtenExamsTable.examType, title: materialsTable.title })
+      .from(writtenExamsTable)
+      .innerJoin(materialsTable, eq(materialsTable.id, writtenExamsTable.materialId))
+      .where(eq(writtenExamsTable.id, updated.examId));
+    await afterSignature(req.log, {
+      classId: updated.classId,
+      sourceKind: "scritto",
+      sourceId: id,
+      examId: updated.examId,
+      title: exam ? `${exam.title} (${exam.examType})` : "Compito scritto",
+    });
+  }
 
   res.json(updated);
 });
@@ -361,40 +500,54 @@ router.post("/photo-corrections/:id/validate", requireTeacher, async (req, res):
     return;
   }
 
-  const classIds = await teacherClassIds(req.teacher!.id);
+  const roles = await teacherClassRoles(req.teacher!.id);
   const [row] = await db
-    .select({ id: photoCorrectionsTable.id, classId: photoCorrectionsTable.classId })
+    .select({
+      id: photoCorrectionsTable.id,
+      classId: photoCorrectionsTable.classId,
+      validationStatus: photoCorrectionsTable.validationStatus,
+      gradeScale: photoCorrectionsTable.gradeScale,
+    })
     .from(photoCorrectionsTable)
     .where(eq(photoCorrectionsTable.id, id));
 
-  if (!row || !row.classId || !classIds.includes(row.classId)) {
+  if (!row || !row.classId || !roles.has(row.classId)) {
     res.status(404).json({ error: "Correzione non trovata" });
     return;
   }
 
-  if (!(await applyDiagnosis(res, { sourceKind: "foto", sourceId: id, teacherId: req.teacher!.id, decisions: parsed.data.diagnosis }))) {
+  const plan = planSignature({
+    role: roles.get(row.classId),
+    teacherId: req.teacher!.id,
+    currentStatus: row.validationStatus,
+    scale: row.gradeScale,
+    grade: parsed.data.grade,
+    feedback: parsed.data.feedback,
+    decisions: parsed.data.diagnosis.length,
+  });
+  if (!plan.ok) {
+    res.status(plan.status).json({ error: plan.error });
     return;
   }
 
-  const [updated] = await db
-    .update(photoCorrectionsTable)
-    .set({
-      validationStatus: "validata",
-      teacherGrade: parsed.data.grade,
-      teacherFeedback: parsed.data.feedback,
-      validatedByTeacherId: req.teacher!.id,
-      validatedAt: new Date(),
-    })
-    .where(eq(photoCorrectionsTable.id, id))
-    .returning();
+  if (
+    !plan.skipDiagnosis &&
+    !(await applyDiagnosis(res, { sourceKind: "foto", sourceId: id, teacherId: req.teacher!.id, decisions: parsed.data.diagnosis }))
+  ) {
+    return;
+  }
 
-  await afterSignature(req.log, {
-    classId: updated.classId,
-    sourceKind: "foto",
-    sourceId: id,
-    examId: null,
-    title: `Compiti fotografati di ${updated.subject}`,
-  });
+  const [updated] = await db.update(photoCorrectionsTable).set(plan.patch).where(eq(photoCorrectionsTable.id, id)).returning();
+
+  if (!plan.byTutor) {
+    await afterSignature(req.log, {
+      classId: updated.classId,
+      sourceKind: "foto",
+      sourceId: id,
+      examId: null,
+      title: `Compiti fotografati di ${updated.subject}`,
+    });
+  }
 
   res.json(updated);
 });
@@ -413,7 +566,13 @@ router.post("/oral-sessions/:id/validate", requireTeacher, async (req, res): Pro
   }
 
   const [session] = await db
-    .select({ id: oralSessionsTable.id, materialId: oralSessionsTable.materialId })
+    .select({
+      id: oralSessionsTable.id,
+      materialId: oralSessionsTable.materialId,
+      classId: oralSessionsTable.classId,
+      validationStatus: oralSessionsTable.validationStatus,
+      gradeScale: oralSessionsTable.gradeScale,
+    })
     .from(oralSessionsTable)
     .where(eq(oralSessionsTable.id, id));
   if (!session) {
@@ -422,35 +581,35 @@ router.post("/oral-sessions/:id/validate", requireTeacher, async (req, res): Pro
   }
 
   // Il materiale dev'essere assegnato a una classe del docente.
-  const classIds = await teacherClassIds(req.teacher!.id);
+  const roles = await teacherClassRoles(req.teacher!.id);
+  const classIds = Array.from(roles.keys());
   const [link] = classIds.length
     ? await db
         .select({ classId: materialClassesTable.classId })
         .from(materialClassesTable)
-        .where(
-          and(
-            eq(materialClassesTable.materialId, session.materialId),
-            inArray(materialClassesTable.classId, classIds),
-          ),
-        )
+        .where(and(eq(materialClassesTable.materialId, session.materialId), inArray(materialClassesTable.classId, classIds)))
     : [];
   if (!link) {
     res.status(404).json({ error: "Interrogazione non trovata" });
     return;
   }
+  const classId = session.classId !== null && roles.has(session.classId) ? session.classId : link.classId;
 
-  const [updated] = await db
-    .update(oralSessionsTable)
-    .set({
-      validationStatus: "validata",
-      teacherGrade: parsed.data.grade,
-      teacherFeedback: parsed.data.feedback,
-      validatedByTeacherId: req.teacher!.id,
-      validatedAt: new Date(),
-    })
-    .where(eq(oralSessionsTable.id, id))
-    .returning();
+  const plan = planSignature({
+    role: roles.get(classId),
+    teacherId: req.teacher!.id,
+    currentStatus: session.validationStatus,
+    scale: session.gradeScale,
+    grade: parsed.data.grade,
+    feedback: parsed.data.feedback,
+    decisions: 0,
+  });
+  if (!plan.ok) {
+    res.status(plan.status).json({ error: plan.error });
+    return;
+  }
 
+  const [updated] = await db.update(oralSessionsTable).set(plan.patch).where(eq(oralSessionsTable.id, id)).returning();
   res.json(updated);
 });
 

@@ -11,6 +11,7 @@ import {
   storeDiagnosis,
   diagnosisForSources,
 } from "../lib/diagnosis";
+import { scaleForClass, hideUnconfirmed } from "../lib/gradeScale";
 
 const router: IRouter = Router();
 
@@ -99,6 +100,7 @@ router.post("/photo-corrections", requireAuth, async (req, res): Promise<void> =
       authUserId: req.authUserId!,
       studentName,
       classId: membership?.classId ?? null,
+      gradeScale: await scaleForClass(membership?.classId),
       subject,
       gradeLevel,
       materialId: materialId ?? null,
@@ -144,7 +146,7 @@ router.get("/photo-corrections/mine", requireAuth, async (req, res): Promise<voi
   );
   res.json(
     rows.map((r) => ({
-      ...r,
+      ...hideUnconfirmed(r),
       diagnosis: (diagnosis.get(r.id) ?? []).map((d) => ({
         exercise: d.exercise,
         objective: d.teacher?.objective ?? null,

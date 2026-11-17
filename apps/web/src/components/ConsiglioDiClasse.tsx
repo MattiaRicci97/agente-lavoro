@@ -8,12 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Star, X, Users } from "lucide-react";
+import { useInstitutionProfile } from "@/lib/institutionProfile";
 
 interface CouncilTeacher {
   id: number;
   teacherId: number;
   subject: string;
-  role: "coordinatore" | "docente";
+  role: "coordinatore" | "docente" | "tutor";
   name: string;
   email: string;
 }
@@ -27,7 +28,8 @@ interface Council {
  * I docenti che lavorano su una classe.
  *
  * Una classe e' della scuola, non di chi l'ha creata: il coordinatore tiene
- * l'organico, gli altri insegnano con gli stessi poteri.
+ * l'organico, gli altri insegnano con gli stessi poteri. Il tutor (corsi
+ * numerosi) prepara le correzioni, che un docente poi conferma.
  */
 export function ConsiglioDiClasse({ classId }: { classId: number }) {
   const { toast } = useToast();
@@ -35,6 +37,9 @@ export function ConsiglioDiClasse({ classId }: { classId: number }) {
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [adding, setAdding] = useState(false);
+  const [asTutor, setAsTutor] = useState(false);
+  const { profile } = useInstitutionProfile();
+  const school = profile.kind === "scuola";
 
   const queryKey = ["classCouncil", classId];
   const { data, isLoading } = useQuery({
@@ -58,12 +63,13 @@ export function ConsiglioDiClasse({ classId }: { classId: number }) {
       customFetch(`/api/classes/${classId}/teachers`, {
         method: "POST",
         responseType: "json",
-        body: JSON.stringify({ email: email.trim(), subject: subject.trim() }),
+        body: JSON.stringify({ email: email.trim(), subject: subject.trim(), role: asTutor ? "tutor" : "docente" }),
       }),
     onSuccess: () => {
-      toast({ title: "Docente aggiunto al consiglio" });
+      toast({ title: asTutor ? "Tutor aggiunto" : school ? "Docente aggiunto al consiglio" : "Docente aggiunto al corso" });
       setEmail("");
       setSubject("");
+      setAsTutor(false);
       setAdding(false);
       refresh();
     },
@@ -99,9 +105,9 @@ export function ConsiglioDiClasse({ classId }: { classId: number }) {
     <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
       <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
         <Users className="h-3.5 w-3.5" />
-        Consiglio di classe
+        {school ? "Consiglio di classe" : "Docenti del corso"}
         <span className="ml-auto normal-case tracking-normal">
-          {teachers.length} docent{teachers.length === 1 ? "e" : "i"}
+          {teachers.length} {teachers.length === 1 ? "persona" : "persone"}
         </span>
       </div>
 
@@ -114,9 +120,14 @@ export function ConsiglioDiClasse({ classId }: { classId: number }) {
             {t.role === "coordinatore" && <Star className="h-3 w-3 fill-secondary text-secondary" />}
             <span className="font-medium">{t.name}</span>
             {t.subject && <span className="text-xs text-muted-foreground">· {t.subject}</span>}
+            {t.role === "tutor" && (
+              <Badge variant="outline" className="text-[10px]" title="Prepara le correzioni: le conferma un docente">
+                tutor
+              </Badge>
+            )}
             {data?.isCoordinator && (
               <>
-                {t.role !== "coordinatore" && (
+                {t.role === "docente" && (
                   <button
                     type="button"
                     className="ml-1 text-muted-foreground opacity-0 transition-opacity hover:text-secondary group-hover:opacity-100"
@@ -168,6 +179,10 @@ export function ConsiglioDiClasse({ classId }: { classId: number }) {
                 className="h-8 bg-card"
               />
             </div>
+            <label className="flex h-8 items-center gap-1.5 text-xs" title="Prepara le correzioni; allo studente arrivano solo dopo la conferma di un docente">
+              <input type="checkbox" checked={asTutor} onChange={(e) => setAsTutor(e.target.checked)} />
+              Come tutor
+            </label>
             <Button type="submit" size="sm" disabled={addTeacher.isPending || !email.trim()}>
               Aggiungi
             </Button>
@@ -187,7 +202,12 @@ export function ConsiglioDiClasse({ classId }: { classId: number }) {
           Il coordinatore <Badge variant="outline" className="mx-1 text-[10px]">
             <Star className="mr-1 h-2.5 w-2.5 fill-secondary text-secondary" />
           </Badge>
-          gestisce chi insegna in questa classe.
+          gestisce chi insegna in {school ? "questa classe" : "questo corso"}.
+        </p>
+      )}
+      {teachers.some((t) => t.role === "tutor") && (
+        <p className="text-xs text-muted-foreground">
+          I tutor preparano le correzioni: arrivano {school ? "agli studenti" : "a chi segue il corso"} solo dopo la conferma di un docente.
         </p>
       )}
     </div>

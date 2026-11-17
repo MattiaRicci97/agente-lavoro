@@ -15,6 +15,11 @@ export const institutionsTable = pgTable("institutions", {
    * Decide quali funzioni compaiono e con quali parole (classe o corso).
    */
   kind: text("kind").notNull().default("scuola"),
+  /**
+   * La scala dei voti: "decimi" | "trentesimi" | "centesimi".
+   * Null = quella tipica del tipo di istituto.
+   */
+  gradeScale: text("grade_scale"),
   /** "prova" (self-serve) | "istituto" (licenza acquistata) */
   plan: text("plan").notNull().default("prova"),
   /** Posti docente disponibili; null = illimitati. */

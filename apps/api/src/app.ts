@@ -2,6 +2,7 @@ import express, { type Express, type Request, type Response, type NextFunction }
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
+import { audienceContext } from "./lib/audience";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
@@ -30,7 +31,8 @@ app.use(cors({ credentials: true, origin: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", router);
+// Ogni richiesta porta con se' chi la fa: l'assistente scrive al livello del suo istituto.
+app.use("/api", audienceContext, router);
 
 // Rete di sicurezza: qualsiasi errore non gestito in una route torna come
 // JSON pulito (non una pagina HTML) cosi' il frontend puo' mostrarlo bene.

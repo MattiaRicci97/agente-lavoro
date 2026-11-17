@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@sillabo/api-client-react";
+import type { GradeScale } from "@/lib/gradeScale";
 
 export type InstitutionKind = "scuola" | "universita" | "business_school";
 export type OptionalFeature = "registro" | "scrutinio" | "invalsi" | "maturita" | "edfin" | "moduli" | "catalogo_nazionale";
@@ -9,7 +10,9 @@ export interface InstitutionProfile {
   label: string;
   hidden: OptionalFeature[];
   terms: { group: string; groups: string; learner: string; learners: string };
-  adminInstitutions: Array<{ id: number; name: string; kind: InstitutionKind }>;
+  /** La scala dei voti di chi usa l'app. */
+  gradeScale: GradeScale;
+  adminInstitutions: Array<{ id: number; name: string; kind: InstitutionKind; gradeScale: GradeScale; gradeScaleChosen: boolean }>;
   kinds: Array<{ kind: InstitutionKind; label: string }>;
 }
 
@@ -19,6 +22,7 @@ const SCHOOL: InstitutionProfile = {
   label: "Scuola superiore",
   hidden: [],
   terms: { group: "classe", groups: "classi", learner: "studente", learners: "studenti" },
+  gradeScale: "decimi",
   adminInstitutions: [],
   kinds: [],
 };

@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod/v4";
 import { logger } from "./logger";
+import { currentAudience, adaptSystemPrompt } from "./audience";
 
 // Client Anthropic creato solo al primo utilizzo: cosi' il server si avvia
 // anche se la chiave non e' impostata, e sono solo le funzioni AI a fallire
@@ -17,6 +18,18 @@ function getAnthropic(): Anthropic {
 }
 
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
+
+/**
+ * Ogni chiamata al modello passa da qui: le istruzioni si adattano al tipo
+ * d'istituto di chi sta usando Sillabo (scuola, universita', business school).
+ */
+async function createMessage(
+  params: Anthropic.MessageCreateParamsNonStreaming,
+): Promise<Anthropic.Message> {
+  const kind = await currentAudience();
+  const system = typeof params.system === "string" ? adaptSystemPrompt(params.system, kind) : params.system;
+  return getAnthropic().messages.create({ ...params, system });
+}
 
 export function extractJson<T>(text: string): T {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -72,7 +85,7 @@ export async function generateActiveRecallQuestions(
   gradeLevel: string,
   content: string,
 ): Promise<GeneratedQuestion[]> {
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 8192,
     system:
@@ -112,7 +125,7 @@ export async function gradeQuizAnswer(
   correctAnswer: string,
   studentAnswer: string,
 ): Promise<GradedAnswerResult> {
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 1024,
     system:
@@ -174,7 +187,7 @@ export async function classifyCurriculumTopic(
       candidates.map((c) => `- ${c.code}: ${c.title}`).join("\n")
     : "";
 
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 512,
     system:
@@ -217,7 +230,7 @@ export async function generateSimplifiedContent(
   gradeLevel: string,
   content: string,
 ): Promise<string> {
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 4096,
     system:
@@ -278,7 +291,7 @@ export async function generateWrittenExamPrompt(
 ): Promise<WrittenExamPromptResult> {
   const label = EXAM_TYPE_LABELS[examType] ?? examType;
 
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: isPrimaProva(examType) ? 3500 : 2048,
     system:
@@ -404,7 +417,7 @@ export async function gradeWrittenExam(
       `Il voto complessivo deve essere coerente con la media pesata dei criteri.`
     : "";
 
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 3072,
     system:
@@ -449,7 +462,7 @@ export async function generateRubric(input: {
   prompt: string;
 }): Promise<unknown> {
   const label = EXAM_TYPE_LABELS[input.examType] ?? input.examType;
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 1500,
     system:
@@ -487,7 +500,7 @@ export async function nextOralExamTurn(
   const turnsSoFar = transcript.filter((m) => m.role === "examiner").length;
   const shouldWrapUp = turnsSoFar >= 4;
 
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     // Ampio margine: il turno finale include osservazione + voto + feedback
     // dettagliato, e una risposta troncata farebbe fallire il parsing.
@@ -527,7 +540,7 @@ export async function askTeacherAssistant(
   history: Array<{ role: "user" | "assistant"; content: string }>,
   question: string,
 ): Promise<string> {
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 1500,
     system:
@@ -559,7 +572,7 @@ export async function askStudyTutor(
     ? "Lo studente ha dichiarato BES/DSA: usa frasi brevi e dirette, lessico semplice, un concetto alla volta, elenchi puntati e grassetto per le parole chiave. Evita subordinate complesse. "
     : "";
 
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 1200,
     system:
@@ -615,7 +628,7 @@ export async function correctPhotoHomework(
     ? `La consegna del compito era: "${assignmentPrompt.trim()}".`
     : "La consegna non e' stata specificata: deducila dal contenuto.";
 
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 3072,
     system:
@@ -674,7 +687,7 @@ export async function draftClassNotice(
   className: string,
   teacherName: string,
 ): Promise<NoticeDraftResult> {
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 800,
     system:
@@ -738,7 +751,7 @@ export async function draftGiudizio(input: {
     ? `${input.practice.attempts} esercitazioni autonome svolte, ${input.practice.accuracyPercent ?? "n/d"}% di risposte corrette`
     : "nessuna esercitazione autonoma registrata";
 
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 500,
     system:
@@ -822,7 +835,7 @@ export async function generateRecoveryQuestions(input: {
         (o.commonError ? ` (errore piu' frequente nella classe: ${o.commonError})` : ""),
     )
     .join("\n");
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 4096,
     system:
@@ -876,7 +889,7 @@ export async function generateHints(input: {
   const list = input.questions
     .map((q) => `[${q.id}] Domanda: ${q.question}\nRisposta attesa: ${q.answer}`)
     .join("\n\n");
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 4096,
     system:
@@ -919,7 +932,7 @@ export async function draftRecoveryActivity(input: {
   groupSize: number;
   classSize: number;
 }): Promise<{ title: string; activity: string }> {
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 1500,
     system:
@@ -956,7 +969,7 @@ export async function generateFollowupExam(input: {
   gradeLevel: string;
   objectives: Array<{ code: string; title: string; description: string }>;
 }): Promise<string> {
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 2048,
     system:
@@ -1051,7 +1064,7 @@ export async function askCourseAssistant(input: {
   ];
 
   for (let round = 0; round < 3; round += 1) {
-    const message = await getAnthropic().messages.create({
+    const message = await createMessage({
       model: MODEL,
       max_tokens: 1500,
       system,
@@ -1098,7 +1111,7 @@ export async function draftMaterialTool(input: {
   gradeLevel: string;
   content: string;
 }): Promise<string> {
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 2500,
     system:
@@ -1149,7 +1162,7 @@ export async function generateInvalsiTest(input: {
     input.subject === "Inglese"
       ? input.gradeLevel.startsWith("5") ? "livello B2 del Quadro comune europeo" : "livello B1 del Quadro comune europeo"
       : `fine della ${input.gradeLevel.startsWith("5") ? "quinta" : "seconda"} superiore`;
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 8000,
     system:
@@ -1222,7 +1235,7 @@ export async function summarizeGuidedSession(input: {
   const dialogue = input.transcript
     .map((m) => `${m.role === "user" ? "Studente" : "Assistente"}: ${m.content.slice(0, 1500)}`)
     .join("\n");
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 800,
     system:
@@ -1277,7 +1290,7 @@ export async function generateReviewPlan(input: {
   passages: CoursePassage[];
   objectivesToConsolidate: string[];
 }): Promise<ReviewPlanDraft> {
-  const message = await getAnthropic().messages.create({
+  const message = await createMessage({
     model: MODEL,
     max_tokens: 2500,
     system:

@@ -81,6 +81,8 @@ export interface RegistroEntry {
   feedback: string | null;
   /** Chi ha firmato: nel consiglio di classe i voti sono di piu' colleghi. */
   signedBy: string | null;
+  /** "decimi" | "trentesimi" | "centesimi": la scala del voto. */
+  gradeScale: string;
 }
 
 /** Media dei voti firmati, arrotondata a un decimale. */
@@ -143,6 +145,7 @@ export async function signedEntriesByStudent(
       subject: photoCorrectionsTable.subject,
       title: photoCorrectionsTable.assignmentPrompt,
       grade: photoCorrectionsTable.teacherGrade,
+      gradeScale: photoCorrectionsTable.gradeScale,
       feedback: photoCorrectionsTable.teacherFeedback,
       signedBy: teachersTable.name,
     })
@@ -169,6 +172,7 @@ export async function signedEntriesByStudent(
       grade: p.grade,
       feedback: p.feedback,
       signedBy: p.signedBy,
+      gradeScale: p.gradeScale,
     });
   }
 
@@ -183,6 +187,7 @@ export async function signedEntriesByStudent(
       subject: materialsTable.subject,
       title: materialsTable.title,
       grade: oralSessionsTable.teacherGrade,
+      gradeScale: oralSessionsTable.gradeScale,
       feedback: oralSessionsTable.teacherFeedback,
       signedBy: teachersTable.name,
     })
@@ -206,6 +211,7 @@ export async function signedEntriesByStudent(
       grade: o.grade,
       feedback: o.feedback,
       signedBy: o.signedBy,
+      gradeScale: o.gradeScale,
     });
   }
 
@@ -221,6 +227,7 @@ export async function signedEntriesByStudent(
       title: materialsTable.title,
       examType: writtenExamsTable.examType,
       grade: writtenExamSubmissionsTable.teacherGrade,
+      gradeScale: writtenExamSubmissionsTable.gradeScale,
       feedback: writtenExamSubmissionsTable.teacherFeedback,
       signedBy: teachersTable.name,
     })
@@ -249,6 +256,7 @@ export async function signedEntriesByStudent(
       grade: w.grade,
       feedback: w.feedback,
       signedBy: w.signedBy,
+      gradeScale: w.gradeScale,
     });
   }
 

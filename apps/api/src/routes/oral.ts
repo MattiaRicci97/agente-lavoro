@@ -17,6 +17,7 @@ import {
 } from "@sillabo/api-zod";
 import { nextOralExamTurn } from "../lib/ai";
 import { requireAuth, findApprovedStudentForMaterial } from "../middlewares/auth";
+import { scaleForClass, hideUnconfirmed } from "../lib/gradeScale";
 
 const router: IRouter = Router();
 
@@ -34,7 +35,8 @@ async function loadSessionWithMessages(sessionId: number) {
     .where(eq(oralMessagesTable.sessionId, sessionId))
     .orderBy(asc(oralMessagesTable.id));
 
-  return { ...session, messages };
+  // Una correzione preparata dal tutor resta "in correzione" finche' il docente non la conferma.
+  return { ...hideUnconfirmed(session), messages };
 }
 
 router.post("/materials/:id/oral-sessions", requireAuth, async (req, res): Promise<void> => {
@@ -84,6 +86,7 @@ router.post("/materials/:id/oral-sessions", requireAuth, async (req, res): Promi
       materialId: material.id,
       authUserId: req.authUserId!,
       classId: student.classId,
+      gradeScale: await scaleForClass(student.classId),
       studentName: student.name,
       status: "in_corso",
       focusTopic: focusContent ? topic : null,
@@ -124,7 +127,7 @@ router.get("/materials/:id/oral-sessions/history", requireAuth, async (req, res)
     .where(eq(oralSessionsTable.materialId, params.data.id))
     .orderBy(desc(oralSessionsTable.createdAt));
 
-  res.json(ListOralSessionsResponse.parse(rows));
+  res.json(ListOralSessionsResponse.parse(rows.map(hideUnconfirmed)));
 });
 
 router.get("/oral-sessions/:id", requireAuth, async (req, res): Promise<void> => {

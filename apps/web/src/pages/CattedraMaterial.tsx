@@ -328,28 +328,6 @@ export default function CattedraMaterial() {
           </div>
 
           <div className="space-y-6">
-            <Card className="border-destructive/20 bg-destructive/5">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2 text-destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  Studenti a rischio
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {analyticsLoading ? <Skeleton className="h-16" /> : !analytics?.atRiskStudents.length ? (
-                  <div className="text-sm text-muted-foreground">Nessuno studente a rischio rilevato.</div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {analytics.atRiskStudents.map((name, i) => (
-                      <span key={i} className="px-2 py-1 bg-destructive/10 text-destructive text-xs font-medium rounded-md">
-                        {name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm">Le tue domande ({material.questionCount})</CardTitle>

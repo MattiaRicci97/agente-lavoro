@@ -4,12 +4,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { useInstitutionProfile, PROFILE_QUERY_KEY, type InstitutionKind } from "@/lib/institutionProfile";
 import { School, Landmark, Briefcase, Check, type LucideIcon } from "lucide-react";
+import { SCALE_LABEL, type GradeScale } from "@/lib/gradeScale";
 
 const DESCRIPTION: Record<InstitutionKind, { icon: LucideIcon; text: string }> = {
   scuola: { icon: School, text: "Classi, registro, scrutinio, Maturità, INVALSI e mappa degli obiettivi nazionale." },
   universita: { icon: Landmark, text: "Corsi al posto delle classi. Niente registro, scrutinio né prove nazionali; obiettivi scritti dall'ateneo." },
   business_school: { icon: Briefcase, text: "Come l'università, e gli studenti si chiamano partecipanti." },
 };
+
+function defaultScale(kind: InstitutionKind): GradeScale {
+  return kind === "universita" ? "trentesimi" : kind === "business_school" ? "centesimi" : "decimi";
+}
 
 /**
  * Per un amministratore: il tipo del suo istituto, che decide quali funzioni
@@ -22,10 +27,14 @@ export function InstitutionKindCard() {
   const queryClient = useQueryClient();
 
   const change = useMutation({
-    mutationFn: ({ id, kind }: { id: number; kind: InstitutionKind }) =>
-      customFetch(`/api/institutions/${id}/kind`, { method: "PUT", responseType: "json", body: JSON.stringify({ kind }) }),
-    onSuccess: () => {
-      toast({ title: "Tipo di istituto aggiornato", description: "Menu e parole si adattano subito, per te e per i tuoi studenti." });
+    mutationFn: ({ id, ...body }: { id: number; kind?: InstitutionKind; gradeScale?: GradeScale | null }) =>
+      customFetch(`/api/institutions/${id}/kind`, { method: "PUT", responseType: "json", body: JSON.stringify(body) }),
+    onSuccess: (_d, vars) => {
+      toast(
+        vars.kind
+          ? { title: "Tipo di istituto aggiornato", description: "Menu e parole si adattano subito, per te e per i tuoi studenti." }
+          : { title: "Scala dei voti aggiornata", description: "Vale per le consegne nuove; quelle già fatte restano nella loro scala." },
+      );
       void queryClient.invalidateQueries();
       void queryClient.invalidateQueries({ queryKey: PROFILE_QUERY_KEY });
     },
@@ -72,6 +81,25 @@ export function InstitutionKindCard() {
                   </button>
                 );
               })}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-sm">
+              <label htmlFor={`scale-${inst.id}`} className="text-muted-foreground">
+                Scala dei voti
+              </label>
+              <select
+                id={`scale-${inst.id}`}
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                disabled={change.isPending}
+                value={inst.gradeScaleChosen ? inst.gradeScale : ""}
+                onChange={(e) => change.mutate({ id: inst.id, gradeScale: (e.target.value || null) as GradeScale | null })}
+              >
+                <option value="">Quella tipica ({SCALE_LABEL[defaultScale(inst.kind)].toLowerCase()})</option>
+                {(Object.keys(SCALE_LABEL) as GradeScale[]).map((k) => (
+                  <option key={k} value={k}>
+                    {SCALE_LABEL[k]}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         ))}

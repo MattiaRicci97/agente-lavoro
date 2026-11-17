@@ -637,6 +637,7 @@ export const StartOralSessionResponse = zod.object({
   "feedback": zod.string().nullable(),
   "validationStatus": zod.enum(['da_validare', 'validata']).optional(),
   "teacherGrade": zod.number().nullable().optional(),
+  "gradeScale": zod.string().optional(),
   "teacherFeedback": zod.string().nullable().optional(),
   "validatedAt": zod.coerce.date().nullable().optional(),
   "createdAt": zod.coerce.date()
@@ -667,6 +668,7 @@ export const ListOralSessionsResponseItem = zod.object({
   "feedback": zod.string().nullable(),
   "validationStatus": zod.enum(['da_validare', 'validata']).optional(),
   "teacherGrade": zod.number().nullable().optional(),
+  "gradeScale": zod.string().optional(),
   "teacherFeedback": zod.string().nullable().optional(),
   "validatedAt": zod.coerce.date().nullable().optional(),
   "createdAt": zod.coerce.date()
@@ -690,6 +692,7 @@ export const GetOralSessionResponse = zod.object({
   "feedback": zod.string().nullable(),
   "validationStatus": zod.enum(['da_validare', 'validata']).optional(),
   "teacherGrade": zod.number().nullable().optional(),
+  "gradeScale": zod.string().optional(),
   "teacherFeedback": zod.string().nullable().optional(),
   "validatedAt": zod.coerce.date().nullable().optional(),
   "createdAt": zod.coerce.date()
@@ -727,6 +730,7 @@ export const ReplyToOralSessionResponse = zod.object({
   "feedback": zod.string().nullable(),
   "validationStatus": zod.enum(['da_validare', 'validata']).optional(),
   "teacherGrade": zod.number().nullable().optional(),
+  "gradeScale": zod.string().optional(),
   "teacherFeedback": zod.string().nullable().optional(),
   "validatedAt": zod.coerce.date().nullable().optional(),
   "createdAt": zod.coerce.date()

@@ -3,24 +3,11 @@ import { eq, and, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, institutionsTable, institutionMembersTable, studentsTable, classesTable, teachersTable } from "@sillabo/db";
 import { requireAuth, requireTeacher } from "../middlewares/auth";
-import { teacherInstitutionIds } from "../lib/objectives";
+import { institutionIdsFor } from "../lib/audience";
 import { INSTITUTION_KINDS, PROFILES, resolveProfile } from "../lib/institutionProfile";
+import { GRADE_SCALES, scaleFor } from "../lib/gradeScale";
 
 const router: IRouter = Router();
-
-/** Gli istituti di chi chiama: come docente (membro o tramite classi) e come studente. */
-async function institutionIdsFor(authUserId: string): Promise<number[]> {
-  const ids = new Set<number>();
-  const [teacher] = await db.select({ id: teachersTable.id }).from(teachersTable).where(eq(teachersTable.authUserId, authUserId));
-  if (teacher) for (const id of await teacherInstitutionIds(teacher.id)) ids.add(id);
-  const asStudent = await db
-    .select({ institutionId: classesTable.institutionId })
-    .from(studentsTable)
-    .innerJoin(classesTable, eq(classesTable.id, studentsTable.classId))
-    .where(eq(studentsTable.authUserId, authUserId));
-  for (const r of asStudent) ids.add(r.institutionId);
-  return Array.from(ids);
-}
 
 /**
  * Il profilo con cui l'interfaccia si presenta a chi chiama: quali funzioni
@@ -30,14 +17,20 @@ async function institutionIdsFor(authUserId: string): Promise<number[]> {
 router.get("/me/profile", requireAuth, async (req, res): Promise<void> => {
   const ids = await institutionIdsFor(req.authUserId!);
   const institutions = ids.length
-    ? await db.select({ id: institutionsTable.id, name: institutionsTable.name, kind: institutionsTable.kind }).from(institutionsTable).where(inArray(institutionsTable.id, ids))
+    ? await db
+        .select({ id: institutionsTable.id, name: institutionsTable.name, kind: institutionsTable.kind, gradeScale: institutionsTable.gradeScale })
+        .from(institutionsTable)
+        .where(inArray(institutionsTable.id, ids))
     : [];
   const profile = resolveProfile(institutions.map((i) => i.kind));
+  // La scala dei voti: se gli istituti ne usano piu' d'una, i decimi.
+  const scales = new Set(institutions.map((i) => scaleFor(i.kind, i.gradeScale)));
+  const gradeScale = scales.size === 1 ? Array.from(scales)[0] : "decimi";
 
   const [teacher] = await db.select({ id: teachersTable.id }).from(teachersTable).where(eq(teachersTable.authUserId, req.authUserId!));
   const adminOf = teacher
     ? await db
-        .select({ id: institutionsTable.id, name: institutionsTable.name, kind: institutionsTable.kind })
+        .select({ id: institutionsTable.id, name: institutionsTable.name, kind: institutionsTable.kind, gradeScale: institutionsTable.gradeScale })
         .from(institutionMembersTable)
         .innerJoin(institutionsTable, eq(institutionsTable.id, institutionMembersTable.institutionId))
         .where(and(eq(institutionMembersTable.teacherId, teacher.id), eq(institutionMembersTable.role, "amministratore")))
@@ -45,14 +38,24 @@ router.get("/me/profile", requireAuth, async (req, res): Promise<void> => {
 
   res.json({
     ...profile,
-    adminInstitutions: adminOf,
+    gradeScale,
+    adminInstitutions: adminOf.map((i) => ({ ...i, gradeScale: scaleFor(i.kind, i.gradeScale), gradeScaleChosen: i.gradeScale !== null })),
     kinds: INSTITUTION_KINDS.map((k) => ({ kind: k, label: PROFILES[k].label })),
   });
 });
 
-const KindBody = z.object({ kind: z.enum(INSTITUTION_KINDS) });
+const KindBody = z
+  .object({
+    kind: z.enum(INSTITUTION_KINDS).optional(),
+    /** null = torna alla scala tipica del tipo di istituto. */
+    gradeScale: z.enum(GRADE_SCALES).nullable().optional(),
+  })
+  .refine((b) => b.kind !== undefined || b.gradeScale !== undefined);
 
-/** Solo un amministratore dell'istituto ne cambia il tipo. */
+/**
+ * Solo un amministratore dell'istituto ne cambia il tipo e la scala dei voti.
+ * La scala vale per le consegne nuove: quelle gia' fatte restano nella loro.
+ */
 router.put("/institutions/:id/kind", requireTeacher, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const [membership] = Number.isInteger(id)
@@ -71,14 +74,17 @@ router.put("/institutions/:id/kind", requireTeacher, async (req, res): Promise<v
   }
   const parsed = KindBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Tipo di istituto non valido" });
+    res.status(400).json({ error: "Tipo di istituto o scala dei voti non validi" });
     return;
   }
   const [updated] = await db
     .update(institutionsTable)
-    .set({ kind: parsed.data.kind })
+    .set({
+      ...(parsed.data.kind !== undefined ? { kind: parsed.data.kind } : {}),
+      ...(parsed.data.gradeScale !== undefined ? { gradeScale: parsed.data.gradeScale } : {}),
+    })
     .where(eq(institutionsTable.id, id))
-    .returning({ id: institutionsTable.id, kind: institutionsTable.kind });
+    .returning({ id: institutionsTable.id, kind: institutionsTable.kind, gradeScale: institutionsTable.gradeScale });
   res.json(updated);
 });
 

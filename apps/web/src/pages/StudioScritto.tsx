@@ -1,4 +1,5 @@
 import { DiagnosisSummary } from "@/components/DiagnosisSummary";
+import { asScale, formatGrade } from "@/lib/gradeScale";
 import { EXAM_TYPE_LABELS, isMaturitaSimulation, isSpokenAssignment, toTwentieths } from "@/lib/examTypes";
 import { AudioRecorder, type Recording } from "@/components/AudioRecorder";
 import { ProtectedAudio } from "@/components/ProtectedAudio";
@@ -25,6 +26,7 @@ interface MySubmission {
   answer: string;
   status: "da_validare" | "validata";
   grade: number | null;
+  gradeScale?: string;
   feedback: string | null;
   audioObjectPath?: string | null;
   audioSeconds?: number | null;
@@ -81,9 +83,9 @@ function SubmissionOutcome({ submission, twentieths }: { submission: MySubmissio
             <h2 className="font-display text-2xl font-semibold">Corretto dal tuo docente</h2>
           </div>
           {submission.grade !== null && (
-            <div className="mt-4 text-6xl font-bold text-secondary">{submission.grade}/10</div>
+            <div className="mt-4 text-6xl font-bold text-secondary">{formatGrade(submission.grade, asScale(submission.gradeScale))}</div>
           )}
-          {submission.grade !== null && twentieths && (
+          {submission.grade !== null && twentieths && asScale(submission.gradeScale) === "decimi" && (
             <p className="mt-2 text-sm text-muted-foreground">
               Sulla scala dell'esame: {toTwentieths(submission.grade)}/20. È una simulazione, serve ad allenarsi.
             </p>

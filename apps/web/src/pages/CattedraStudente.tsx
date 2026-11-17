@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { gradeTone } from "@/lib/grades";
+import { asScale, formatGrade, isPassing, SCALE_RANGE } from "@/lib/gradeScale";
 
 interface Entry {
   kind: "compito" | "interrogazione" | "elaborato";
@@ -33,6 +34,7 @@ interface Entry {
   grade: number | null;
   feedback: string | null;
   signedBy: string | null;
+  gradeScale?: string;
 }
 
 interface Note {
@@ -59,6 +61,8 @@ const KIND: Record<Entry["kind"], { label: string; icon: LucideIcon }> = {
 function Andamento({ entries }: { entries: Entry[] }) {
   const graded = entries.filter((e) => e.grade !== null).slice().reverse();
   if (graded.length < 2) return null;
+  const scale = asScale(graded[0].gradeScale);
+  const top = SCALE_RANGE[scale].max;
 
   const first = graded[0].grade!;
   const last = graded[graded.length - 1].grade!;
@@ -85,11 +89,11 @@ function Andamento({ entries }: { entries: Entry[] }) {
             <div
               key={`${e.kind}-${e.id}`}
               className="flex flex-1 flex-col items-center gap-1"
-              title={`${e.title}: ${e.grade}/10`}
+              title={`${e.title}: ${formatGrade(e.grade, scale)}`}
             >
               <div
-                className={`w-full rounded-t ${e.grade! >= 6 ? "bg-secondary/60" : "bg-destructive/50"}`}
-                style={{ height: `${(e.grade! / 10) * 100}%` }}
+                className={`w-full rounded-t ${isPassing(e.grade!, scale) ? "bg-secondary/60" : "bg-destructive/50"}`}
+                style={{ height: `${Math.min(1, e.grade! / top) * 100}%` }}
               />
               <span className="text-[10px] text-muted-foreground">{e.grade}</span>
             </div>
@@ -239,7 +243,9 @@ export default function CattedraStudente() {
                         )}
                       </div>
                       {e.grade !== null && (
-                        <span className={`text-lg font-semibold ${gradeTone(e.grade)}`}>{e.grade}</span>
+                        <span className={`text-lg font-semibold ${asScale(e.gradeScale) === "decimi" ? gradeTone(e.grade) : isPassing(e.grade, asScale(e.gradeScale)) ? "text-foreground" : "text-destructive"}`}>
+                          {asScale(e.gradeScale) === "decimi" ? e.grade : formatGrade(e.grade, asScale(e.gradeScale))}
+                        </span>
                       )}
                     </div>
                   );
