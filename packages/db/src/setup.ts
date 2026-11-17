@@ -7,12 +7,15 @@
  *     (l'app le raggiunge via connessione Postgres diretta, che non e' soggetta a RLS);
  *  2. crea il bucket privato "materials" su Supabase Storage, con policy che
  *     permettono upload e download ai soli utenti autenticati;
- *  3. carica il catalogo dei moduli della super-app (se non gia' presente).
+ *  3. carica il catalogo dei moduli della super-app (se non gia' presente);
+ *  4. carica il catalogo base degli obiettivi di apprendimento (bozze da
+ *     rivedere: il seed non tocca mai un obiettivo gia' confermato da un docente).
  */
 import { config } from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { OBJECTIVE_CATALOG, validateObjectiveCatalog } from "./seed/objectives";
 
 // Carica il file .env dalla radice del repo (dove l'utente mette le chiavi).
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -51,6 +54,31 @@ const APP_TABLES = [
   "photo_corrections",
   "institution_members",
   "invites",
+  "learning_objectives",
+  "learning_objective_prerequisites",
+  "institution_objective_overrides",
+  "material_objectives",
+  "diagnosis_items",
+  "mastery_events",
+  "mastery_states",
+  "recovery_sets",
+  "recovery_set_sources",
+  "recovery_questions",
+  "recovery_items",
+  "student_notices",
+  "recovery_activities",
+  "course_chunks",
+  "study_plans",
+  "device_tokens",
+  "material_tools",
+  "material_views",
+  "invalsi_tests",
+  "invalsi_items",
+  "invalsi_attempts",
+  "guided_activities",
+  "guided_activity_materials",
+  "guided_activity_objectives",
+  "guided_activity_sessions",
 ];
 
 const MODULE_CATALOG: Array<{
@@ -353,6 +381,11 @@ async function main() {
     // finivano in scansioni sequenziali, che crescono con i dati della scuola.
     const INDEXES: Array<[string, string]> = [
       ["class_teachers_teacher_idx", "class_teachers (teacher_id)"],
+      ["guided_activities_class_idx", "guided_activities (class_id)"],
+      ["invalsi_tests_class_idx", "invalsi_tests (class_id)"],
+      ["invalsi_items_test_idx", "invalsi_items (test_id)"],
+      ["invalsi_attempts_student_idx", "invalsi_attempts (student_id)"],
+      ["guided_activity_sessions_student_idx", "guided_activity_sessions (student_id)"],
       ["students_class_idx", "students (class_id)"],
       ["material_classes_class_idx", "material_classes (class_id)"],
       ["materials_teacher_idx", "materials (teacher_id)"],
@@ -375,6 +408,27 @@ async function main() {
       ["invites_institution_idx", "invites (institution_id)"],
       ["scrutini_class_idx", "scrutini (class_id)"],
       ["scrutinio_entries_scrutinio_idx", "scrutinio_entries (scrutinio_id)"],
+      ["learning_objectives_scope_idx", "learning_objectives (subject, grade_level)"],
+      ["learning_objectives_institution_idx", "learning_objectives (institution_id)"],
+      ["institution_objective_overrides_institution_idx", "institution_objective_overrides (institution_id)"],
+      ["material_objectives_objective_idx", "material_objectives (objective_id)"],
+      ["questions_objective_idx", "questions (objective_id)"],
+      ["diagnosis_items_source_idx", "diagnosis_items (source_kind, source_id)"],
+      ["diagnosis_items_student_idx", "diagnosis_items (student_id, status)"],
+      ["diagnosis_items_class_idx", "diagnosis_items (class_id, objective_id)"],
+      ["mastery_events_pair_idx", "mastery_events (student_id, objective_id)"],
+      ["mastery_events_source_idx", "mastery_events (source_kind, source_id)"],
+      ["recovery_sets_class_idx", "recovery_sets (class_id, status)"],
+      ["recovery_questions_set_idx", "recovery_questions (recovery_set_id)"],
+      ["recovery_items_student_idx", "recovery_items (student_id, status, due_date)"],
+      ["recovery_items_set_idx", "recovery_items (recovery_set_id)"],
+      ["student_notices_student_idx", "student_notices (student_id, read_at)"],
+      ["written_exams_recovery_set_idx", "written_exams (recovery_set_id)"],
+      ["course_chunks_material_idx", "course_chunks (material_id)"],
+      // Ricerca a tutto testo in italiano sui passaggi del corso.
+      ["course_chunks_fts_idx", "course_chunks USING gin (to_tsvector('italian', content))"],
+      ["study_plans_student_idx", "study_plans (student_id)"],
+      ["device_tokens_user_idx", "device_tokens (auth_user_id)"],
     ];
     for (const [name, target] of INDEXES) {
       await client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${target}`);
@@ -476,6 +530,63 @@ async function main() {
       }
     }
     console.log(`✓ Modulo Ed. Finanziaria: ${FIN_ED_LESSONS.length} lezioni caricate`);
+
+    // 5. Catalogo base degli obiettivi di apprendimento (institution_id NULL).
+    //    Upsert per codice: il titolo e la descrizione vengono aggiornati solo
+    //    finche' l'obiettivo e' ancora una bozza. Quello che un docente ha
+    //    riletto e confermato resta com'e'.
+    const catalogProblems = validateObjectiveCatalog(OBJECTIVE_CATALOG);
+    if (catalogProblems.length) {
+      throw new Error(`Seed obiettivi non coerente:\n- ${catalogProblems.join("\n- ")}`);
+    }
+    let seededObjectives = 0;
+    for (const group of OBJECTIVE_CATALOG) {
+      const idByCode = new Map<string, number>();
+      for (const [ord, o] of group.objectives.entries()) {
+        const { rows } = await client.query<{ id: number }>(
+          `INSERT INTO public.learning_objectives
+             (institution_id, subject, grade_level, code, title, description, review_status, active, ord)
+           VALUES (NULL, $1, $2, $3, $4, $5, 'bozza_da_rivedere', true, $6)
+           ON CONFLICT (subject, grade_level, code) WHERE institution_id IS NULL DO UPDATE
+             SET ord = EXCLUDED.ord,
+                 title = CASE WHEN learning_objectives.review_status = 'bozza_da_rivedere'
+                              THEN EXCLUDED.title ELSE learning_objectives.title END,
+                 description = CASE WHEN learning_objectives.review_status = 'bozza_da_rivedere'
+                                    THEN EXCLUDED.description ELSE learning_objectives.description END
+           RETURNING id`,
+          [group.subject, group.gradeLevel, o.code, o.title, o.description, ord],
+        );
+        idByCode.set(o.code, rows[0].id);
+        seededObjectives += 1;
+      }
+      // Le propedeuticita' del catalogo base si riallineano al seed (nessun dato
+      // utente vive su questa tabella per gli obiettivi base).
+      const ids = Array.from(idByCode.values());
+      await client.query(
+        `DELETE FROM public.learning_objective_prerequisites WHERE objective_id = ANY($1::int[])`,
+        [ids],
+      );
+      for (const o of group.objectives) {
+        for (const reqCode of o.requires ?? []) {
+          const objectiveId = idByCode.get(o.code)!;
+          // Il prerequisito puo' stare in un altro anno dello stesso catalogo.
+          const { rows } = await client.query<{ id: number }>(
+            `SELECT id FROM public.learning_objectives
+              WHERE institution_id IS NULL AND subject = $1 AND code = $2`,
+            [group.subject, reqCode],
+          );
+          if (!rows[0]) {
+            throw new Error(`Seed obiettivi: ${o.code} richiede ${reqCode}, che non esiste nel catalogo`);
+          }
+          await client.query(
+            `INSERT INTO public.learning_objective_prerequisites (objective_id, requires_objective_id)
+             VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [objectiveId, rows[0].id],
+          );
+        }
+      }
+    }
+    console.log(`\u2713 Obiettivi di apprendimento: ${seededObjectives} nel catalogo base (bozze da rivedere)`);
 
     console.log("\nSetup del database completato.");
   } finally {

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sillabo</string>
+    <string name="title_activity_main">Sillabo</string>
+    <string name="package_name">it.sillabo.app</string>
+    <string name="custom_url_scheme">it.sillabo.app</string>
+</resources>

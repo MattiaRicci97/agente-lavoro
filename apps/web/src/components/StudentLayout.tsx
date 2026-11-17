@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { LogOut, BookMarked, CalendarClock, UserCircle, PiggyBank, ScanLine, Megaphone } from "lucide-react";
+import { useInstitutionProfile } from "@/lib/institutionProfile";
+import { LogOut, BookMarked, CalendarClock, UserCircle, PiggyBank, ScanLine, Megaphone, MessagesSquare } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@sillabo/api-client-react";
@@ -20,17 +21,19 @@ function NavLink({
   label: string;
   active: boolean;
   badge?: number;
+  short?: string;
 }) {
   return (
     <Link href={href}>
       <div
+        title={label}
         className={cn(
           "hover-elevate relative flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
           active ? "bg-secondary/12 text-secondary" : "text-muted-foreground hover:text-foreground",
         )}
       >
         <Icon className="h-4 w-4" />
-        <span className="hidden sm:inline">{label}</span>
+        <span className="hidden lg:inline">{label}</span>
         {badge && badge > 0 ? (
           <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-semibold text-secondary-foreground">
             {badge}
@@ -44,11 +47,22 @@ function NavLink({
 export function StudentLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { signOut } = useAuth();
+  const { shows } = useInstitutionProfile();
 
   const { data: unread } = useQuery({
     queryKey: ["unreadPosts"],
     queryFn: () => customFetch<{ unread: number }>("/api/class-posts/unread-count", { responseType: "json" }),
   });
+
+  const items = [
+    { href: "/studio", icon: BookMarked, label: "Materiali", active: location === "/studio" || location.startsWith("/studio/material") },
+    { href: "/studio/bacheca", icon: Megaphone, label: "Bacheca", active: location === "/studio/bacheca", badge: unread?.unread ?? 0 },
+    { href: "/studio/corso", icon: MessagesSquare, label: "Chiedi al corso", short: "Corso", active: location === "/studio/corso" },
+    { href: "/studio/ripasso", icon: CalendarClock, label: "Ripasso", active: location === "/studio/ripasso" || location === "/studio/lampo" },
+    { href: "/studio/foto", icon: ScanLine, label: "Correggi", active: location === "/studio/foto" },
+    ...(shows("edfin") ? [{ href: "/studio/finanza", icon: PiggyBank, label: "Finanza", active: location.startsWith("/studio/finanza") }] : []),
+    { href: "/studio/profilo", icon: UserCircle, label: "Profilo", active: location === "/studio/profilo" },
+  ];
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/40">
@@ -64,23 +78,11 @@ export function StudentLayout({ children }: { children: React.ReactNode }) {
           </Link>
 
           <nav className="flex items-center gap-1">
-            <NavLink href="/studio" icon={BookMarked} label="Materiali" active={location === "/studio"} />
-            <NavLink
-              href="/studio/bacheca"
-              icon={Megaphone}
-              label="Bacheca"
-              active={location === "/studio/bacheca"}
-              badge={unread?.unread ?? 0}
-            />
-            <NavLink href="/studio/ripasso" icon={CalendarClock} label="Ripasso" active={location === "/studio/ripasso"} />
-            <NavLink href="/studio/foto" icon={ScanLine} label="Correggi" active={location === "/studio/foto"} />
-            <NavLink
-              href="/studio/finanza"
-              icon={PiggyBank}
-              label="Finanza"
-              active={location.startsWith("/studio/finanza")}
-            />
-            <NavLink href="/studio/profilo" icon={UserCircle} label="Profilo" active={location === "/studio/profilo"} />
+            <div className="hidden items-center gap-1 sm:flex">
+              {items.map((item) => (
+                <NavLink key={item.href} {...item} />
+              ))}
+            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -94,7 +96,32 @@ export function StudentLayout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="container mx-auto flex-1 px-4 py-8">{children}</main>
+      <main className="container mx-auto flex-1 px-4 py-8 pb-24 sm:pb-8">{children}</main>
+
+      {/* Su telefono la navigazione sta in basso, a portata di pollice, come in un'app. */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-20 flex items-stretch justify-around border-t border-border/60 bg-card/95 backdrop-blur sm:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {items.map((item) => (
+          <Link key={item.href} href={item.href}>
+            <div
+              className={cn(
+                "relative flex min-w-0 cursor-pointer flex-col items-center gap-0.5 px-1.5 py-2 text-[10px] font-medium",
+                item.active ? "text-secondary" : "text-muted-foreground",
+              )}
+            >
+              <item.icon className="h-5 w-5" />
+              <span className="truncate">{item.short ?? item.label}</span>
+              {item.badge && item.badge > 0 ? (
+                <span className="absolute right-0.5 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-semibold text-secondary-foreground">
+                  {item.badge}
+                </span>
+              ) : null}
+            </div>
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }

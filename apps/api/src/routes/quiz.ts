@@ -12,6 +12,9 @@ import {
 } from "@sillabo/api-zod";
 import { gradeQuizAnswer } from "../lib/ai";
 import { requireAuth, findApprovedStudentForMaterial } from "../middlewares/auth";
+import { teacherCanManageMaterial } from "../lib/materialAccess";
+import { teachersTable, materialObjectivesTable } from "@sillabo/db";
+import { recordEvidence } from "../lib/mastery";
 
 const router: IRouter = Router();
 
@@ -22,10 +25,31 @@ router.get("/materials/:id/quiz-attempts", requireAuth, async (req, res): Promis
     return;
   }
 
+  // Il docente che gestisce il materiale vede tutti i tentativi; lo studente
+  // solo i propri. Chiunque altro non vede nulla.
+  const [teacher] = await db
+    .select({ id: teachersTable.id })
+    .from(teachersTable)
+    .where(eq(teachersTable.authUserId, req.authUserId!));
+  let scope;
+  if (teacher && (await teacherCanManageMaterial(teacher.id, params.data.id))) {
+    scope = eq(quizAttemptsTable.materialId, params.data.id);
+  } else {
+    const student = await findApprovedStudentForMaterial(req.authUserId!, params.data.id);
+    if (!student) {
+      res.status(404).json({ error: "Materiale non trovato" });
+      return;
+    }
+    scope = and(
+      eq(quizAttemptsTable.materialId, params.data.id),
+      eq(quizAttemptsTable.authUserId, req.authUserId!),
+    );
+  }
+
   const rows = await db
     .select()
     .from(quizAttemptsTable)
-    .where(eq(quizAttemptsTable.materialId, params.data.id))
+    .where(scope)
     .orderBy(desc(quizAttemptsTable.createdAt));
 
   res.json(ListQuizAttemptsResponse.parse(rows));
@@ -127,7 +151,14 @@ router.get("/materials/:id/quiz-set", requireAuth, async (req, res): Promise<voi
   }
 
   res.json({
-    questions: picked.map((q) => ({ id: q.id, question: q.question, topic: q.topic, difficulty: q.difficulty })),
+    questions: picked.map((q) => ({
+      id: q.id,
+      question: q.question,
+      topic: q.topic,
+      difficulty: q.difficulty,
+      // Solo gli aiuti che il docente ha approvato.
+      hints: q.hintsStatus === "approvati" ? q.hints : [],
+    })),
     focusTopics: weakTopics.slice(0, 3),
     level,
   });
@@ -219,6 +250,33 @@ router.post("/materials/:id/quiz-attempts", requireAuth, async (req, res): Promi
       durationSeconds,
     })
     .returning();
+
+  // Pratica: aggiorna il profilo di padronanza, non crea voti. L'obiettivo e'
+  // quello della domanda o, se il materiale ne copre uno solo, quello.
+  try {
+    const linked = await db
+      .select({ objectiveId: materialObjectivesTable.objectiveId })
+      .from(materialObjectivesTable)
+      .where(eq(materialObjectivesTable.materialId, material.id));
+    const fallback = linked.length === 1 ? linked[0].objectiveId : null;
+    await recordEvidence(
+      gradedAnswers.flatMap((a) => {
+        const objectiveId = questionsById.get(a.questionId)?.objectiveId ?? fallback;
+        return objectiveId
+          ? [{
+              studentId: student.id,
+              objectiveId,
+              source: "pratica" as const,
+              outcome: a.correct ? ("corretto" as const) : ("errato" as const),
+              sourceKind: "quiz",
+              sourceId: attempt.id,
+            }]
+          : [];
+      }),
+    );
+  } catch (err) {
+    req.log.error({ err }, "Profilo di padronanza non aggiornato dopo il quiz");
+  }
 
   const missedTopics = Array.from(
     new Set(gradedAnswers.filter((a) => !a.correct && a.topic).map((a) => a.topic)),

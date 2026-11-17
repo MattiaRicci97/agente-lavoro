@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useInstitutionProfile } from "@/lib/institutionProfile";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -461,6 +462,7 @@ function ClassesSection({ institutionId }: { institutionId: number }) {
 }
 
 export default function CattedraClassi() {
+  const { terms } = useInstitutionProfile();
   const { data: institutions, isLoading } = useListInstitutions();
   const institution = institutions?.[0];
 
@@ -468,7 +470,7 @@ export default function CattedraClassi() {
     <TeacherLayout>
       <div className="p-8 max-w-5xl mx-auto space-y-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Le mie classi</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{terms.group === "corso" ? "I miei corsi" : "Le mie classi"}</h1>
           <p className="text-muted-foreground mt-1">Gestisci il tuo istituto e le tue classi, e condividi i codici di iscrizione.</p>
         </div>
 

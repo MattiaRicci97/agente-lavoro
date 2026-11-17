@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, desc, and } from "drizzle-orm";
-import { db, materialsTable, materialClassesTable, questionsTable } from "@sillabo/db";
+import { db, materialsTable, materialClassesTable, questionsTable, materialObjectivesTable, materialViewsTable } from "@sillabo/db";
 import {
   CreateMaterialBody,
   ListMaterialsResponse,
@@ -15,12 +15,14 @@ import { z } from "zod/v4";
 import { attachClassIds } from "../lib/materialClasses";
 import { materialVisibilityFilter, teacherCanManageMaterial } from "../lib/materialAccess";
 import { announceToClasses } from "../lib/classFeed";
+import { candidateObjectivesForMaterial } from "../lib/objectives";
+import { indexMaterial } from "../lib/courseSearch";
 import {
   extractTextFromUploadedFile,
   UnsupportedFileTypeError,
   EmptyExtractedContentError,
 } from "../lib/fileExtraction";
-import { requireAuth, requireTeacher } from "../middlewares/auth";
+import { requireAuth, requireTeacher, findApprovedStudentForMaterial } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -139,14 +141,33 @@ router.post("/materials", requireTeacher, async (req, res): Promise<void> => {
     return;
   }
 
+  // Tipo e data della lezione non fanno parte dello schema generato.
+  const extra = z
+    .object({
+      kind: z.enum(["documento", "lezione"]).optional(),
+      lessonDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    })
+    .safeParse(req.body);
+  const kind = extra.success ? (extra.data.kind ?? "documento") : "documento";
+  const lessonDate = extra.success && kind === "lezione" ? (extra.data.lessonDate ?? null) : null;
+
   const materialInput = {
     ...rest,
+    kind,
+    lessonDate,
     teacherId: req.teacher!.id,
     content: finalContent,
     fileUrl: fileUrl ?? null,
     fileName: fileName ?? null,
   };
   const [material] = await db.insert(materialsTable).values(materialInput).returning();
+
+  // Entra nell'archivio del corso, su cui lavora la chat di ripasso.
+  try {
+    await indexMaterial(material);
+  } catch (err) {
+    req.log.error({ err, materialId: material.id }, "Indicizzazione del materiale non riuscita (verra' ritentata alla prima ricerca)");
+  }
 
   if (classIds?.length) {
     await db
@@ -167,12 +188,24 @@ router.post("/materials", requireTeacher, async (req, res): Promise<void> => {
 
   req.log.info({ materialId: material.id }, "Classifying curriculum topic");
   try {
-    const { topic, subtopic } = await classifyCurriculumTopic(
+    // Se l'istituto ha una mappa degli obiettivi per questa materia, l'assistente
+    // sceglie tra quelli; il collegamento resta una proposta ("ai") che il
+    // docente puo' correggere dalla pagina del materiale.
+    const candidates = await candidateObjectivesForMaterial(req.teacher!.id, material.subject, material.gradeLevel);
+    const { topic, subtopic, objectiveCodes } = await classifyCurriculumTopic(
       material.title,
       material.subject,
       material.gradeLevel,
       material.content,
+      candidates.map((c) => ({ code: c.code, title: c.title })),
     );
+    const chosen = candidates.filter((c) => objectiveCodes.includes(c.code));
+    if (chosen.length) {
+      await db
+        .insert(materialObjectivesTable)
+        .values(chosen.map((c) => ({ materialId: material.id, objectiveId: c.id, source: "ai" })))
+        .onConflictDoNothing();
+    }
     const [updated] = await db
       .update(materialsTable)
       .set({ curriculumTopic: topic, curriculumSubtopic: subtopic })
@@ -217,6 +250,23 @@ router.get("/materials/:id", requireAuth, async (req, res): Promise<void> => {
 
   const [withClassIds] = await attachClassIds([row]);
   res.json(GetMaterialResponse.parse(withClassIds));
+
+  // Se chi apre e' uno studente della classe, si annota che l'ha aperto (prima
+  // e ultima volta). E' un di piu': se fallisce, il materiale si apre lo stesso.
+  try {
+    const student = await findApprovedStudentForMaterial(req.authUserId!, row.id);
+    if (student) {
+      await db
+        .insert(materialViewsTable)
+        .values({ materialId: row.id, studentId: student.id })
+        .onConflictDoUpdate({
+          target: [materialViewsTable.materialId, materialViewsTable.studentId],
+          set: { lastSeenAt: new Date() },
+        });
+    }
+  } catch (err) {
+    req.log.warn({ err, materialId: row.id }, "Apertura del materiale non annotata");
+  }
 });
 
 router.post("/materials/:id/simplify", requireTeacher, async (req, res): Promise<void> => {

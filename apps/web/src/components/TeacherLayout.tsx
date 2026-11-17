@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   BarChart3,
@@ -13,6 +14,14 @@ import {
   Megaphone,
   ClipboardList,
   Gavel,
+  Target,
+  LifeBuoy,
+  Grid3x3,
+  LineChart,
+  Menu,
+  X,
+  Compass,
+  ListChecks,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +30,7 @@ import { useAuth } from "@/lib/auth";
 import { useListJoinRequests, customFetch } from "@sillabo/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { useInstitutionProfile } from "@/lib/institutionProfile";
 
 function NavItem({
   href,
@@ -64,6 +74,8 @@ function NavItem({
 export function TeacherLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { signOut } = useAuth();
+  const { shows, terms } = useInstitutionProfile();
+  const myGroups = terms.group === "corso" ? "I miei corsi" : "Le mie classi";
   const { data: requests } = useListJoinRequests();
   const pendingCount = requests?.filter((r) => r.status === "pending").length ?? 0;
 
@@ -73,10 +85,33 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
   });
   const toValidateCount = validations?.total ?? 0;
 
+  // Su telefono il menu e' a scomparsa: si apre dal pulsante in alto e si
+  // richiude da solo quando si cambia pagina.
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => setMenuOpen(false), [location]);
+
   return (
     <div className="flex min-h-screen flex-col bg-muted/40 md:flex-row">
-      <aside className="flex w-full flex-col border-r border-border/70 bg-card/80 backdrop-blur md:w-64">
-        <div className="border-b border-border/60 p-5">
+      <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/60 bg-card/95 px-4 backdrop-blur md:hidden">
+        <Link href="/cattedra">
+          <div className="flex cursor-pointer items-center gap-2">
+            <Logo className="text-primary" size="md" />
+          </div>
+        </Link>
+        <Button variant="ghost" size="icon" className="relative" onClick={() => setMenuOpen((o) => !o)} aria-label={menuOpen ? "Chiudi il menu" : "Apri il menu"}>
+          {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          {!menuOpen && toValidateCount + pendingCount > 0 ? (
+            <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-secondary" />
+          ) : null}
+        </Button>
+      </div>
+      <aside
+        className={cn(
+          "w-full flex-col border-r border-border/70 bg-card/80 backdrop-blur md:flex md:w-64",
+          menuOpen ? "fixed inset-x-0 bottom-0 top-14 z-20 flex overflow-y-auto bg-card" : "hidden",
+        )}
+      >
+        <div className="hidden border-b border-border/60 p-5 md:block">
           <Link href="/">
             <div className="flex cursor-pointer items-center gap-2">
               <Logo className="text-primary" size="md" />
@@ -92,10 +127,13 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
             Insegnamento
           </div>
           <NavItem href="/cattedra" icon={BarChart3} label="Panoramica" active={location === "/cattedra"} />
-          <NavItem href="/cattedra/classi" icon={GraduationCap} label="Le mie classi" active={location === "/cattedra/classi"} />
+          <NavItem href="/cattedra/classi" icon={GraduationCap} label={myGroups} active={location === "/cattedra/classi"} />
           <NavItem href="/cattedra/bacheca" icon={Megaphone} label="Bacheca" active={location === "/cattedra/bacheca"} />
-          <NavItem href="/cattedra/registro" icon={ClipboardList} label="Registro" active={location.startsWith("/cattedra/registro")} />
-          <NavItem href="/cattedra/scrutinio" icon={Gavel} label="Scrutinio" active={location === "/cattedra/scrutinio"} />
+          {shows("registro") && (
+            <NavItem href="/cattedra/registro" icon={ClipboardList} label="Registro" active={location.startsWith("/cattedra/registro")} />
+          )}
+          {shows("scrutinio") && <NavItem href="/cattedra/scrutinio" icon={Gavel} label="Scrutinio" active={location === "/cattedra/scrutinio"} />}
+          <NavItem href="/cattedra/obiettivi" icon={Target} label="Obiettivi" active={location === "/cattedra/obiettivi"} />
           <NavItem
             href="/cattedra/validazioni"
             icon={Stamp}
@@ -103,14 +141,21 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
             active={location === "/cattedra/validazioni"}
             badge={toValidateCount}
           />
+          <NavItem href="/cattedra/recupero" icon={LifeBuoy} label="Recupero" active={location === "/cattedra/recupero"} />
+          <NavItem href="/cattedra/mappa" icon={Grid3x3} label={`Mappa ${terms.group === "corso" ? "del corso" : "della classe"}`} active={location === "/cattedra/mappa"} />
+          <NavItem href="/cattedra/attivita" icon={Compass} label="Attività guidate" active={location === "/cattedra/attivita"} />
+          {shows("invalsi") && (
+            <NavItem href="/cattedra/invalsi" icon={ListChecks} label="Allenamento INVALSI" active={location === "/cattedra/invalsi"} />
+          )}
           <NavItem href="/cattedra/assistente" icon={Sparkles} label="Assistente" active={location === "/cattedra/assistente"} />
 
           <div className="px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             Gestione
           </div>
           <NavItem href="/cattedra/istituto" icon={Building2} label="Istituto" active={location === "/cattedra/istituto"} />
+          <NavItem href="/cattedra/efficacia" icon={LineChart} label="Efficacia" active={location === "/cattedra/efficacia"} />
           <NavItem href="/cattedra/licenza" icon={KeyRound} label="Licenza e utenze" active={location === "/cattedra/licenza"} />
-          <NavItem href="/cattedra/moduli" icon={LayoutGrid} label="Moduli" active={location === "/cattedra/moduli"} />
+          {shows("moduli") && <NavItem href="/cattedra/moduli" icon={LayoutGrid} label="Moduli" active={location === "/cattedra/moduli"} />}
           <NavItem
             href="/cattedra/richieste"
             icon={Inbox}
@@ -133,7 +178,7 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="min-w-0 flex-1 overflow-auto">{children}</main>
     </div>
   );
 }

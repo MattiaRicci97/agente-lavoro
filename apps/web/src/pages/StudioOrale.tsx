@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { asScale, formatGrade, fromTenths } from "@/lib/gradeScale";
 import { useParams, Link } from "wouter";
 import {
   useGetMaterial,
@@ -22,6 +23,7 @@ export default function StudioOrale() {
   const materialId = parseInt(id || "0");
   const { toast } = useToast();
 
+  const topic = new URLSearchParams(window.location.search).get("argomento")?.trim() || null;
   const [session, setSession] = useState<any>(null);
   const [currentMessage, setCurrentMessage] = useState("");
   const [voiceMode, setVoiceMode] = useState(true);
@@ -63,7 +65,9 @@ export default function StudioOrale() {
       return;
     }
     startSession.mutate(
-      { id: materialId, data: { studentName } },
+      // Con un argomento (arrivando dalla chat del corso) l'interrogazione verte
+      // sui passaggi di tutto il corso che ne parlano.
+      { id: materialId, data: { studentName, ...(topic ? { topic } : {}) } as { studentName: string } },
       {
         onSuccess: (data) => setSession(data),
         onError: () => toast({ title: "Errore", description: "Impossibile avviare l'interrogazione.", variant: "destructive" }),
@@ -133,6 +137,7 @@ export default function StudioOrale() {
                 </div>
                 <h1 className="text-2xl font-bold text-secondary">Interrogazione: {material.title}</h1>
                 <p className="text-muted-foreground text-sm">
+                  {topic && <strong className="block mb-1 text-foreground">Argomento: {topic}</strong>}
                   Il prof. virtuale ti fara' delle domande sull'argomento, incalzando e chiedendo collegamenti — e se vuoi,
                   a voce, come una vera interrogazione.
                 </p>
@@ -173,6 +178,7 @@ export default function StudioOrale() {
 
   const isCompleted = session.status === "completata";
   const isValidated = session.validationStatus === "validata";
+  const oralScale = asScale((session as { gradeScale?: string }).gradeScale);
 
   return (
     <StudentLayout>
@@ -206,7 +212,9 @@ export default function StudioOrale() {
                   isValidated ? "bg-green-100 text-green-800" : "bg-amber-50 text-amber-800 border border-amber-200"
                 }`}
               >
-                {isValidated ? `Voto del prof: ${session.teacherGrade ?? "—"}/10` : `Proposta: ${session.grade}/10`}
+                {isValidated
+                  ? `Voto del prof: ${formatGrade((session as { teacherGrade?: number | null }).teacherGrade, oralScale)}`
+                  : `Proposta: ${formatGrade(fromTenths(session.grade, oralScale), oralScale)}`}
               </div>
             )}
           </div>

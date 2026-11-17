@@ -1,3 +1,11 @@
+import { DiagnosisSummary } from "@/components/DiagnosisSummary";
+import { asScale, formatGrade } from "@/lib/gradeScale";
+import { EXAM_TYPE_LABELS, isMaturitaSimulation, isSpokenAssignment, toTwentieths } from "@/lib/examTypes";
+import { AudioRecorder, type Recording } from "@/components/AudioRecorder";
+import { ProtectedAudio } from "@/components/ProtectedAudio";
+import { useUpload } from "@/hooks/use-upload";
+import { RubricTable, type RubricCriterion, type RubricScore } from "@/components/Rubric";
+import type { StudentDiagnosisRow } from "@/lib/diagnosis";
 import { useState } from "react";
 import { useParams, Link } from "wouter";
 import { useGetMaterial, getGetMaterialQueryKey, customFetch } from "@sillabo/api-client-react";
@@ -11,18 +19,19 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Loader2, FileText, CalendarClock, Hourglass, CheckCircle2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const examTypeLabels: Record<string, string> = {
-  tema: "Tema",
-  versione: "Versione",
-  problema: "Problema",
-};
+const examTypeLabels = EXAM_TYPE_LABELS;
 
 interface MySubmission {
   id: number;
   answer: string;
   status: "da_validare" | "validata";
   grade: number | null;
+  gradeScale?: string;
   feedback: string | null;
+  audioObjectPath?: string | null;
+  audioSeconds?: number | null;
+  diagnosis?: StudentDiagnosisRow[];
+  rubricScores?: RubricScore[];
   createdAt: string;
 }
 
@@ -34,6 +43,8 @@ interface Assignment {
   dueDate: string | null;
   instructions: string | null;
   createdAt: string;
+  isFollowup?: boolean;
+  rubric?: RubricCriterion[] | null;
   mySubmission: MySubmission | null;
 }
 
@@ -46,7 +57,7 @@ function formatDue(due: string) {
 }
 
 /** Esito della consegna: in attesa del docente, oppure valutato da lui. */
-function SubmissionOutcome({ submission }: { submission: MySubmission }) {
+function SubmissionOutcome({ submission, twentieths }: { submission: MySubmission; twentieths?: boolean }) {
   if (submission.status !== "validata") {
     return (
       <Card className="border-amber-300/60 bg-amber-50/60">
@@ -72,7 +83,12 @@ function SubmissionOutcome({ submission }: { submission: MySubmission }) {
             <h2 className="font-display text-2xl font-semibold">Corretto dal tuo docente</h2>
           </div>
           {submission.grade !== null && (
-            <div className="mt-4 text-6xl font-bold text-secondary">{submission.grade}/10</div>
+            <div className="mt-4 text-6xl font-bold text-secondary">{formatGrade(submission.grade, asScale(submission.gradeScale))}</div>
+          )}
+          {submission.grade !== null && twentieths && asScale(submission.gradeScale) === "decimi" && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Sulla scala dell'esame: {toTwentieths(submission.grade)}/20. È una simulazione, serve ad allenarsi.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -86,6 +102,7 @@ function SubmissionOutcome({ submission }: { submission: MySubmission }) {
           </CardContent>
         </Card>
       )}
+      <DiagnosisSummary rows={submission.diagnosis ?? []} />
     </div>
   );
 }
@@ -98,6 +115,8 @@ export default function StudioScritto() {
 
   const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
   const [answer, setAnswer] = useState("");
+  const [recording, setRecording] = useState<Recording | null>(null);
+  const { uploadFile, isUploading } = useUpload();
 
   const { data: material, isLoading: materialLoading } = useGetMaterial(materialId, {
     query: { enabled: !!materialId, queryKey: getGetMaterialQueryKey(materialId) },
@@ -112,14 +131,23 @@ export default function StudioScritto() {
   });
 
   const submit = useMutation({
-    mutationFn: (examId: number) =>
-      customFetch(`/api/written-exams/${examId}/submit`, {
+    mutationFn: async (examId: number) => {
+      // Un'esposizione a voce: prima si carica la registrazione, poi si consegna.
+      let audio: { audioObjectPath: string; audioSeconds: number } | null = null;
+      if (recording) {
+        const uploaded = await uploadFile(recording.file);
+        if (!uploaded) throw { data: { error: "Caricamento della registrazione non riuscito. Controlla la connessione e riprova." } };
+        audio = { audioObjectPath: uploaded.objectPath, audioSeconds: recording.seconds };
+      }
+      return customFetch(`/api/written-exams/${examId}/submit`, {
         method: "POST",
         responseType: "json",
-        body: JSON.stringify({ studentAnswer: answer }),
-      }),
+        body: JSON.stringify({ studentAnswer: answer, ...(audio ?? {}) }),
+      });
+    },
     onSuccess: () => {
       setAnswer("");
+      setRecording(null);
       queryClient.invalidateQueries({ queryKey: assignmentsKey });
       toast({
         title: "Compito consegnato",
@@ -182,7 +210,7 @@ export default function StudioScritto() {
                   <CardHeader className="pb-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="outline" className="uppercase text-[10px]">
-                        {examTypeLabels[a.examType] ?? a.examType}
+                        {a.isFollowup ? "Verifica di riscontro" : (examTypeLabels[a.examType] ?? a.examType)}
                       </Badge>
                       {a.dueDate && (
                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -216,7 +244,7 @@ export default function StudioScritto() {
               <CardHeader>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className="uppercase text-[10px]">
-                    {examTypeLabels[selected.examType] ?? selected.examType}
+                    {selected.isFollowup ? "Verifica di riscontro" : (examTypeLabels[selected.examType] ?? selected.examType)}
                   </Badge>
                   {selected.dueDate && (
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -235,16 +263,43 @@ export default function StudioScritto() {
               )}
             </Card>
 
+            {selected.rubric && selected.rubric.length > 0 && !selected.mySubmission?.rubricScores?.length && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">
+                  {selected.mySubmission?.rubricScores?.length
+                    ? "Come è andata, criterio per criterio"
+                    : "Come verrà valutato"}
+                </h3>
+                <RubricTable rubric={selected.rubric} scores={selected.mySubmission?.rubricScores} />
+              </div>
+            )}
+
             {selected.mySubmission ? (
               <>
-                <SubmissionOutcome submission={selected.mySubmission} />
+                <SubmissionOutcome submission={selected.mySubmission} twentieths={isMaturitaSimulation(selected.examType)} />
+                {selected.rubric && selected.rubric.length > 0 && !!selected.mySubmission.rubricScores?.length && (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">
+                      {selected.mySubmission?.rubricScores?.length
+                        ? "Come è andata, criterio per criterio"
+                        : "Come verrà valutato"}
+                    </h3>
+                    <RubricTable rubric={selected.rubric} scores={selected.mySubmission?.rubricScores} />
+                  </div>
+                )}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Quello che hai consegnato</CardTitle>
                   </CardHeader>
-                  <CardContent className="whitespace-pre-wrap text-sm text-muted-foreground">
-                    {selected.mySubmission.answer}
-                  </CardContent>
+                  {selected.mySubmission.audioObjectPath ? (
+                    <CardContent>
+                      <ProtectedAudio objectPath={selected.mySubmission.audioObjectPath} seconds={selected.mySubmission.audioSeconds} />
+                    </CardContent>
+                  ) : (
+                    <CardContent className="whitespace-pre-wrap text-sm text-muted-foreground">
+                      {selected.mySubmission.answer}
+                    </CardContent>
+                  )}
                 </Card>
                 <Button variant="outline" onClick={() => setSelectedExamId(null)}>
                   Torna ai compiti
@@ -252,17 +307,26 @@ export default function StudioScritto() {
               </>
             ) : (
               <>
-                <div className="space-y-2">
-                  <Textarea
-                    placeholder="Scrivi qui il tuo svolgimento..."
-                    className="min-h-[400px] p-4 text-base"
-                    value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Si consegna una volta sola: rileggi prima di inviare.
-                  </p>
-                </div>
+                {isSpokenAssignment(selected.examType) ? (
+                  <div className="space-y-2">
+                    <AudioRecorder value={recording} onChange={setRecording} />
+                    <p className="text-xs text-muted-foreground">
+                      Si consegna una volta sola. La registrazione la ascolta il tuo docente, che dà il voto: nessun altro la sente.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Textarea
+                      placeholder="Scrivi qui il tuo svolgimento..."
+                      className="min-h-[400px] p-4 text-base"
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Si consegna una volta sola: rileggi prima di inviare.
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex justify-between border-t pt-4">
                   <Button variant="ghost" onClick={() => setSelectedExamId(null)}>
@@ -272,17 +336,18 @@ export default function StudioScritto() {
                     size="lg"
                     className="bg-secondary px-8 text-secondary-foreground hover:bg-secondary/90"
                     onClick={() => {
-                      if (!answer.trim()) {
+                      const spoken = isSpokenAssignment(selected.examType);
+                      if (spoken ? !recording : !answer.trim()) {
                         toast({
                           title: "Attenzione",
-                          description: "Scrivi il tuo elaborato prima di consegnare.",
+                          description: spoken ? "Registra la tua esposizione prima di consegnare." : "Scrivi il tuo elaborato prima di consegnare.",
                           variant: "destructive",
                         });
                         return;
                       }
                       submit.mutate(selected.id);
                     }}
-                    disabled={submit.isPending}
+                    disabled={submit.isPending || isUploading}
                   >
                     {submit.isPending ? (
                       <>

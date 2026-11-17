@@ -37,12 +37,13 @@ const JoinSchema = z.object({
 const AddTeacherSchema = z.object({
   email: z.string().trim().email().max(320),
   subject: z.string().trim().max(100).default(""),
-  role: z.enum(["coordinatore", "docente"]).default("docente"),
+  /** Il tutor prepara le correzioni; le conferma un docente o il coordinatore. */
+  role: z.enum(["coordinatore", "docente", "tutor"]).default("docente"),
 });
 
 const UpdateTeacherSchema = z.object({
   subject: z.string().trim().max(100).optional(),
-  role: z.enum(["coordinatore", "docente"]).optional(),
+  role: z.enum(["coordinatore", "docente", "tutor"]).optional(),
 });
 
 function generateJoinCode(): string {
@@ -287,7 +288,7 @@ router.patch("/classes/:id/teachers/:memberId", requireTeacher, async (req, res)
   }
 
   // La classe non puo' restare senza coordinatore.
-  if (target.role === "coordinatore" && parsed.data.role === "docente") {
+  if (target.role === "coordinatore" && parsed.data.role && parsed.data.role !== "coordinatore") {
     const [{ coordinators }] = await db
       .select({ coordinators: count() })
       .from(classTeachersTable)

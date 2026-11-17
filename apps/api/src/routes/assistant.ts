@@ -15,6 +15,7 @@ import type { GradedAnswerRecord } from "@sillabo/db";
 import { requireTeacher } from "../middlewares/auth";
 import { teacherClassIds } from "../lib/classAccess";
 import { askTeacherAssistant } from "../lib/ai";
+import { buildClassMap } from "./classMap";
 
 const router: IRouter = Router();
 
@@ -93,6 +94,24 @@ async function buildClassSnapshot(teacherId: number): Promise<string> {
 
   const pendingReviews = reviews.filter((r) => r.status === "da_fare");
   lines.push(`\nRIPASSI IN SOSPESO: ${pendingReviews.length} (completati: ${reviews.length - pendingReviews.length})`);
+
+  // Padronanza per obiettivo: solo conteggi, cosi' l'assistente puo' ragionare
+  // su cosa riprendere senza ricevere il profilo dei singoli.
+  lines.push(`\nPADRONANZA PER OBIETTIVO (dalle verifiche firmate):`);
+  for (const c of classes) {
+    const map = await buildClassMap(c);
+    for (const subject of map.subjects) {
+      const bySubject = subject === map.subject ? map : await buildClassMap(c, subject);
+      for (const o of bySubject.objectives) {
+        if (!o.assessed) continue;
+        const top = o.commonErrors[0];
+        lines.push(
+          `- ${c.name} | ${subject} | ${o.title}: ${o.counts.acquisito} acquisito, ${o.counts.fragile} fragile, ${o.counts.mancante} mancante` +
+            (top ? ` | errore piu' frequente: ${top.errorType} (${top.percent}% dei valutati)` : ""),
+        );
+      }
+    }
+  }
 
   return lines.join("\n");
 }

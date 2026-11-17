@@ -139,17 +139,6 @@ router.get("/institutions/:id/dashboard", requireTeacher, async (req, res): Prom
     }))
     .sort((a, b) => a.accuracyRate - b.accuracyRate);
 
-  const studentScores = new Map<string, { correct: number; total: number }>();
-  for (const attempt of quizAttempts) {
-    const stat = studentScores.get(attempt.studentName) ?? { correct: 0, total: 0 };
-    stat.correct += attempt.score;
-    stat.total += attempt.total;
-    studentScores.set(attempt.studentName, stat);
-  }
-  const atRiskStudents = Array.from(studentScores.entries())
-    .filter(([, stat]) => stat.total > 0 && stat.correct / stat.total < 0.5)
-    .map(([name]) => name);
-
   const classBreakdown = classes.map((cls) => {
     const classMaterialIds = new Set(
       materials.filter((m) => (classIdsByMaterialId.get(m.id) ?? []).includes(cls.id)).map((m) => m.id),
@@ -162,23 +151,12 @@ router.get("/institutions/:id/dashboard", requireTeacher, async (req, res): Prom
             1000,
         ) / 10
       : 0;
-    const classStudentScores = new Map<string, { correct: number; total: number }>();
-    for (const attempt of classAttempts) {
-      const stat = classStudentScores.get(attempt.studentName) ?? { correct: 0, total: 0 };
-      stat.correct += attempt.score;
-      stat.total += attempt.total;
-      classStudentScores.set(attempt.studentName, stat);
-    }
-    const atRiskCount = Array.from(classStudentScores.values()).filter(
-      (stat) => stat.total > 0 && stat.correct / stat.total < 0.5,
-    ).length;
-
     return {
       classId: cls.id,
       className: cls.name,
       studentsCount: students.filter((s) => s.classId === cls.id).length,
       averageQuizScorePercent: classAvg,
-      atRiskCount,
+      atRiskCount: 0,
     };
   });
 
@@ -192,7 +170,8 @@ router.get("/institutions/:id/dashboard", requireTeacher, async (req, res): Prom
       averageQuizScorePercent,
       averageOralGrade,
       topicGaps,
-      atRiskStudents,
+      // Nessuna lista di "studenti a rischio": si guarda agli obiettivi, non alle persone.
+      atRiskStudents: [],
       classBreakdown,
     }),
   );

@@ -1,3 +1,8 @@
+import { isNativeApp } from "@/lib/native";
+import { asScale, formatGrade, fromTenths, gradeParts, isPassing, type GradeScale } from "@/lib/gradeScale";
+import { takeNativePhoto } from "@/lib/camera";
+import { DiagnosisSummary } from "@/components/DiagnosisSummary";
+import type { StudentDiagnosisRow } from "@/lib/diagnosis";
 import { useState, useRef } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -36,13 +41,15 @@ interface PhotoCorrection {
   improvements: string[];
   createdAt: string;
   validationStatus?: "da_validare" | "validata";
+  gradeScale?: string;
   teacherGrade?: number | null;
   teacherFeedback?: string | null;
+  diagnosis?: StudentDiagnosisRow[];
 }
 
-function gradeColor(grade: number | null): string {
+function gradeColor(grade: number | null, scale: GradeScale = "decimi"): string {
   if (grade === null) return "bg-muted text-muted-foreground";
-  if (grade >= 6) return "bg-green-100 text-green-800 border-green-200";
+  if (isPassing(grade, scale)) return "bg-green-100 text-green-800 border-green-200";
   return "bg-red-100 text-red-800 border-red-200";
 }
 
@@ -69,7 +76,24 @@ export default function StudioFoto() {
 
   async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (file) await preparePhoto(file);
+  }
+
+  // Nell'app si usa la fotocamera del telefono; nel browser il selettore di file.
+  async function pickPhoto() {
+    if (!isNativeApp) {
+      fileInputRef.current?.click();
+      return;
+    }
+    try {
+      const file = await takeNativePhoto();
+      if (file) await preparePhoto(file);
+    } catch (err: any) {
+      toast({ title: "Fotocamera non disponibile", description: err?.message ?? "Controlla i permessi dell'app.", variant: "destructive" });
+    }
+  }
+
+  async function preparePhoto(file: File) {
     setPreparing(true);
     try {
       const jpeg = await downscaleToJpeg(file);
@@ -148,7 +172,10 @@ export default function StudioFoto() {
   // --- Schermata risultato ---
   if (result) {
     const isValidated = result.validationStatus === "validata";
-    const shownGrade = isValidated ? (result.teacherGrade ?? null) : result.grade;
+    const scale = asScale(result.gradeScale);
+    // La proposta dell'assistente e' in decimi: si mostra nella scala dell'istituto.
+    const shownGrade = isValidated ? (result.teacherGrade ?? null) : fromTenths(result.grade, scale);
+    const shown = gradeParts(shownGrade, scale);
     return (
       <StudentLayout>
         <div className="max-w-2xl mx-auto space-y-6">
@@ -165,9 +192,9 @@ export default function StudioFoto() {
                   {isValidated ? "Compito corretto dal prof" : "Compito esaminato"}
                 </h1>
               </div>
-              <div className={`rounded-2xl border px-5 py-3 text-center ${gradeColor(shownGrade)}`}>
-                <div className="text-3xl font-bold leading-none">{shownGrade ?? "—"}</div>
-                <div className="text-[11px] font-medium uppercase tracking-wide">/10</div>
+              <div className={`rounded-2xl border px-5 py-3 text-center ${gradeColor(shownGrade, scale)}`}>
+                <div className="text-3xl font-bold leading-none">{shown.value}</div>
+                <div className="text-[11px] font-medium uppercase tracking-wide">{shown.base}</div>
               </div>
             </div>
             <CardContent className="p-6 space-y-6">
@@ -196,6 +223,8 @@ export default function StudioFoto() {
                   <p className="leading-relaxed whitespace-pre-wrap">{result.teacherFeedback}</p>
                 </div>
               )}
+
+              {isValidated && <DiagnosisSummary rows={result.diagnosis ?? []} />}
 
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-1">
@@ -285,7 +314,7 @@ export default function StudioFoto() {
                   variant="outline"
                   size="sm"
                   className="mt-3 w-full"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={pickPhoto}
                   disabled={busy}
                 >
                   <RefreshCw className="mr-2 h-4 w-4" />
@@ -295,7 +324,7 @@ export default function StudioFoto() {
             ) : (
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={pickPhoto}
                 disabled={preparing}
                 className="hover-elevate flex w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-secondary/30 bg-secondary/5 py-12 text-secondary transition-colors"
               >
@@ -393,9 +422,9 @@ export default function StudioFoto() {
                     </div>
                   </div>
                   {h.validationStatus === "validata" ? (
-                    <Badge variant="outline" className={gradeColor(h.teacherGrade ?? null)}>
+                    <Badge variant="outline" className={gradeColor(h.teacherGrade ?? null, asScale(h.gradeScale))}>
                       <BadgeCheck className="mr-1 h-3 w-3" />
-                      {h.teacherGrade ?? "—"}/10
+                      {formatGrade(h.teacherGrade, asScale(h.gradeScale))}
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">

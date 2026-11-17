@@ -88,3 +88,17 @@ export async function classCouncil(classIds: number[]) {
     .where(inArray(classTeachersTable.classId, classIds))
     .orderBy(classTeachersTable.id);
 }
+
+/**
+ * Il ruolo del docente in ciascuna delle sue classi. Un tutor prepara le
+ * correzioni; le conferma un docente titolare (docente o coordinatore).
+ */
+export async function teacherClassRoles(teacherId: number): Promise<Map<number, string>> {
+  const rows = await db
+    .select({ classId: classTeachersTable.classId, role: classTeachersTable.role })
+    .from(classTeachersTable)
+    .where(eq(classTeachersTable.teacherId, teacherId));
+  return new Map(rows.map((r) => [r.classId, r.role]));
+}
+
+export const TUTOR_ROLE = "tutor";

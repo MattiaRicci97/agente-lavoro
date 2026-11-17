@@ -12,7 +12,8 @@
     "db:push": "pnpm --filter @sillabo/db run push",
     "db:setup": "pnpm --filter @sillabo/db run setup",
     "demo:seed": "pnpm --filter @sillabo/db run demo:seed",
-    "demo:clean": "pnpm --filter @sillabo/db run demo:clean"
+    "demo:clean": "pnpm --filter @sillabo/db run demo:clean",
+    "test": "pnpm --filter @sillabo/api run test"
   },
   "devDependencies": {
     "esbuild": "^0.25.12",

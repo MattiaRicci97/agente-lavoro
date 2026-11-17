@@ -1,3 +1,5 @@
+import { z } from "zod/v4";
+import { searchCourse, sourceLabel } from "../lib/courseSearch";
 import { Router, type IRouter } from "express";
 import { eq, asc, desc } from "drizzle-orm";
 import { db, materialsTable, oralSessionsTable, oralMessagesTable } from "@sillabo/db";
@@ -15,6 +17,7 @@ import {
 } from "@sillabo/api-zod";
 import { nextOralExamTurn } from "../lib/ai";
 import { requireAuth, findApprovedStudentForMaterial } from "../middlewares/auth";
+import { scaleForClass, hideUnconfirmed } from "../lib/gradeScale";
 
 const router: IRouter = Router();
 
@@ -32,7 +35,8 @@ async function loadSessionWithMessages(sessionId: number) {
     .where(eq(oralMessagesTable.sessionId, sessionId))
     .orderBy(asc(oralMessagesTable.id));
 
-  return { ...session, messages };
+  // Una correzione preparata dal tutor resta "in correzione" finche' il docente non la conferma.
+  return { ...hideUnconfirmed(session), messages };
 }
 
 router.post("/materials/:id/oral-sessions", requireAuth, async (req, res): Promise<void> => {
@@ -66,18 +70,36 @@ router.post("/materials/:id/oral-sessions", requireAuth, async (req, res): Promi
 
   req.log.info({ materialId: material.id }, "Starting oral exam session");
 
+  // Interrogazione su un argomento del corso: i passaggi su cui verte vengono
+  // cercati in TUTTO il corso (documenti e lezioni) e fissati all'avvio.
+  const topicParse = z.object({ topic: z.string().trim().min(2).max(200).optional() }).safeParse(req.body);
+  const topic = topicParse.success ? (topicParse.data.topic ?? null) : null;
+  let focusContent: string | null = null;
+  if (topic) {
+    const passages = await searchCourse({ classId: student.classId, subject: material.subject, query: topic, limit: 8 });
+    if (passages.length) focusContent = passages.map((p) => `(${sourceLabel(p)})\n${p.content}`).join("\n\n");
+  }
+
   const [session] = await db
     .insert(oralSessionsTable)
     .values({
       materialId: material.id,
       authUserId: req.authUserId!,
       classId: student.classId,
+      gradeScale: await scaleForClass(student.classId),
       studentName: student.name,
       status: "in_corso",
+      focusTopic: focusContent ? topic : null,
+      focusContent,
     })
     .returning();
 
-  const turn = await nextOralExamTurn(material.title, material.subject, material.content, []);
+  const turn = await nextOralExamTurn(
+    focusContent ? topic! : material.title,
+    material.subject,
+    focusContent ?? material.content,
+    [],
+  );
 
   const [firstMessage] = await db
     .insert(oralMessagesTable)
@@ -105,7 +127,7 @@ router.get("/materials/:id/oral-sessions/history", requireAuth, async (req, res)
     .where(eq(oralSessionsTable.materialId, params.data.id))
     .orderBy(desc(oralSessionsTable.createdAt));
 
-  res.json(ListOralSessionsResponse.parse(rows));
+  res.json(ListOralSessionsResponse.parse(rows.map(hideUnconfirmed)));
 });
 
 router.get("/oral-sessions/:id", requireAuth, async (req, res): Promise<void> => {
@@ -170,7 +192,12 @@ router.post("/oral-sessions/:id/messages", requireAuth, async (req, res): Promis
 
   req.log.info({ sessionId: existing.id }, "Processing next oral exam turn");
 
-  const turn = await nextOralExamTurn(material.title, material.subject, material.content, transcript);
+  const turn = await nextOralExamTurn(
+    existing.focusContent ? (existing.focusTopic ?? material.title) : material.title,
+    material.subject,
+    existing.focusContent ?? material.content,
+    transcript,
+  );
 
   const [examinerMessage] = await db
     .insert(oralMessagesTable)

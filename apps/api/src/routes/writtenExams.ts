@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, desc, and, inArray, count } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
@@ -10,22 +10,90 @@ import {
   materialClassesTable,
 } from "@sillabo/db";
 import { GenerateWrittenExamParams } from "@sillabo/api-zod";
-import { generateWrittenExamPrompt, gradeWrittenExam } from "../lib/ai";
+import { generateWrittenExamPrompt, gradeWrittenExam, generateRubric } from "../lib/ai";
+import {
+  EXAM_TYPES,
+  EXAM_TYPE_NAMES,
+  isMaturitaSimulation,
+  isSpokenAssignment,
+  MAX_AUDIO_SECONDS,
+  PRIMA_PROVA_RUBRICS,
+  SPOKEN_ANSWER_PLACEHOLDER,
+} from "../lib/examTypes";
+import { parseRubric, parseRubricScores, weightedGrade, RubricError } from "../lib/rubric";
 import { requireAuth, requireTeacher, findApprovedStudentForMaterial } from "../middlewares/auth";
 import { teacherCanManageMaterial } from "../lib/materialAccess";
 import { announceToClasses } from "../lib/classFeed";
+import { dropEvidenceForSources } from "../lib/mastery";
+import { recoveryRecipientIds, recoveryObjectiveIds } from "../lib/recovery";
+import {
+  candidateObjectivesForStudentWork,
+  toCandidates,
+  storeDiagnosis,
+  diagnosisForSources,
+  deleteDiagnosisForSources,
+} from "../lib/diagnosis";
+import { scaleForClass } from "../lib/gradeScale";
 
 const router: IRouter = Router();
 
 const AssignSchema = z.object({
-  examType: z.enum(["tema", "versione", "problema"]),
+  examType: z.enum(EXAM_TYPES),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   instructions: z.string().trim().max(1000).nullable().optional(),
 });
 
 const SubmitSchema = z.object({
-  studentAnswer: z.string().trim().min(1).max(20000),
+  studentAnswer: z.string().trim().max(20000).default(""),
+  /** Solo per le esposizioni a voce: il file caricato dallo studente. */
+  audioObjectPath: z
+    .string()
+    .regex(/^\/objects\/uploads\/[0-9a-f-]{36}\/[\w.\-]{1,120}$/)
+    .optional(),
+  audioSeconds: z.number().int().min(1).max(MAX_AUDIO_SECONDS + 5).optional(),
 });
+
+const RubricBody = z.object({
+  criteria: z.array(z.unknown()).max(12),
+  /** true = il docente la approva: da qui la vedono gli studenti. */
+  approved: z.boolean().default(false),
+});
+
+/** La griglia come la vede il docente (anche in bozza). */
+function teacherRubric(exam: typeof writtenExamsTable.$inferSelect) {
+  return { rubric: exam.rubric ?? null, rubricStatus: exam.rubric ? exam.rubricStatus : null };
+}
+
+/** La griglia in vigore: solo quella approvata dal docente. */
+function approvedRubric(exam: typeof writtenExamsTable.$inferSelect) {
+  return exam.rubric && exam.rubricStatus === "approvata" ? exam.rubric : null;
+}
+
+/**
+ * Il compito su cui il docente puo' ancora cambiare la griglia: suo, e senza
+ * consegne (cambiarla dopo renderebbe diverse le correzioni dei compagni).
+ */
+async function examWithEditableRubric(
+  req: Request,
+  res: Response,
+  lockedMessage = "Ci sono gia' consegne: la griglia non si puo' piu' cambiare.",
+) {
+  const id = Number(req.params.id);
+  const [exam] = Number.isInteger(id) ? await db.select().from(writtenExamsTable).where(eq(writtenExamsTable.id, id)) : [];
+  if (!exam || !(await teacherCanManageMaterial(req.teacher!.id, exam.materialId))) {
+    res.status(404).json({ error: "Compito non trovato" });
+    return null;
+  }
+  const [{ submissions }] = await db
+    .select({ submissions: count() })
+    .from(writtenExamSubmissionsTable)
+    .where(eq(writtenExamSubmissionsTable.examId, exam.id));
+  if (submissions > 0) {
+    res.status(409).json({ error: lockedMessage });
+    return null;
+  }
+  return exam;
+}
 
 /** Traccia del compito, senza i dati di consegna di nessuno. */
 function assignmentView(exam: typeof writtenExamsTable.$inferSelect) {
@@ -92,7 +160,7 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
       .where(
         and(
           inArray(writtenExamSubmissionsTable.examId, examIds),
-          eq(writtenExamSubmissionsTable.validationStatus, "da_validare"),
+          inArray(writtenExamSubmissionsTable.validationStatus, ["da_validare", "da_confermare"]),
         ),
       )
       .groupBy(writtenExamSubmissionsTable.examId);
@@ -101,6 +169,7 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
     res.json(
       exams.map((e) => ({
         ...assignmentView(e),
+        ...teacherRubric(e),
         submissionsCount: byExam.get(e.id) ?? 0,
         toValidateCount: pendingByExam.get(e.id) ?? 0,
       })),
@@ -115,6 +184,14 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
     return;
   }
 
+  // Una verifica di riscontro riguarda solo chi ha fatto quel recupero.
+  const visibleExams = [];
+  for (const e of exams) {
+    if (e.recoverySetId === null || (await recoveryRecipientIds(e.recoverySetId)).includes(student.id)) {
+      visibleExams.push(e);
+    }
+  }
+
   const mine = await db
     .select()
     .from(writtenExamSubmissionsTable)
@@ -125,20 +202,41 @@ router.get("/materials/:id/written-exams", requireAuth, async (req, res): Promis
       ),
     );
   const mineByExam = new Map(mine.map((s) => [s.examId, s]));
+  // La diagnosi segue il voto: prima della firma non c'e'.
+  const diagnosis = await diagnosisForSources(
+    "scritto",
+    mine.filter((s) => s.validationStatus === "validata").map((s) => s.id),
+    { onlyValidated: true },
+  );
 
   res.json(
-    exams.map((e) => {
+    visibleExams.map((e) => {
       const sub = mineByExam.get(e.id);
       return {
         ...assignmentView(e),
+        // Lo studente conosce i criteri prima di svolgere il compito.
+        rubric: approvedRubric(e),
+        isFollowup: e.recoverySetId !== null,
         mySubmission: sub
           ? {
               id: sub.id,
               answer: sub.answer,
-              status: sub.validationStatus,
+              audioObjectPath: sub.audioObjectPath,
+              audioSeconds: sub.audioSeconds,
+              // La correzione preparata da un tutor, per lo studente, e' ancora in corso.
+              status: sub.validationStatus === "da_confermare" ? "da_validare" : sub.validationStatus,
+              gradeScale: sub.gradeScale,
               // Prima del visto lo studente non riceve nessun voto.
               grade: sub.validationStatus === "validata" ? sub.teacherGrade : null,
               feedback: sub.validationStatus === "validata" ? sub.teacherFeedback : null,
+              rubricScores: sub.validationStatus === "validata" ? (sub.teacherRubricScores ?? []) : [],
+              diagnosis: (diagnosis.get(sub.id) ?? []).map((d) => ({
+                exercise: d.exercise,
+                objective: d.teacher?.objective ?? null,
+                outcome: d.teacher?.outcome ?? d.ai.outcome,
+                errorType: d.teacher?.errorType ?? null,
+                evidence: d.ai.evidence,
+              })),
               createdAt: sub.createdAt,
             }
           : null,
@@ -192,6 +290,11 @@ router.post("/materials/:id/written-exams", requireTeacher, async (req, res): Pr
       dueDate: parsed.data.dueDate ?? null,
       instructions: parsed.data.instructions ?? null,
       status: "assegnato",
+      // Una simulazione nasce con la griglia ministeriale gia' in vigore: non
+      // e' una proposta dell'assistente. Il docente puo' ritoccarla fino alla prima consegna.
+      ...(isMaturitaSimulation(parsed.data.examType)
+        ? { rubric: PRIMA_PROVA_RUBRICS[parsed.data.examType], rubricStatus: "approvata" }
+        : {}),
     })
     .returning();
 
@@ -205,7 +308,7 @@ router.post("/materials/:id/written-exams", requireTeacher, async (req, res): Pr
     teacherId: req.teacher!.id,
     authorName: req.teacher!.name,
     kind: "compito",
-    title: `Compito assegnato: ${parsed.data.examType} su ${material.title}`,
+    title: `Compito assegnato: ${EXAM_TYPE_NAMES[parsed.data.examType].toLowerCase()} su ${material.title}`,
     body: [
       parsed.data.instructions ?? "",
       parsed.data.dueDate
@@ -218,7 +321,87 @@ router.post("/materials/:id/written-exams", requireTeacher, async (req, res): Pr
     writtenExamId: exam.id,
   });
 
-  res.status(201).json({ ...assignmentView(exam), submissionsCount: 0, toValidateCount: 0 });
+  res.status(201).json({ ...assignmentView(exam), ...teacherRubric(exam), submissionsCount: 0, toValidateCount: 0 });
+});
+
+/**
+ * Il docente corregge la traccia scritta dall'assistente. Solo finche' nessuno
+ * ha consegnato: dopo, cambierebbe il compito sotto i piedi di chi l'ha svolto.
+ */
+router.put("/written-exams/:id/prompt", requireTeacher, async (req, res): Promise<void> => {
+  const exam = await examWithEditableRubric(req, res, "Ci sono gia' consegne: la traccia non si puo' piu' cambiare.");
+  if (!exam) return;
+  const parsed = z.object({ prompt: z.string().trim().min(20).max(12000) }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "La traccia deve avere tra 20 e 12000 caratteri." });
+    return;
+  }
+  const [updated] = await db
+    .update(writtenExamsTable)
+    .set({ prompt: parsed.data.prompt })
+    .where(eq(writtenExamsTable.id, exam.id))
+    .returning();
+  res.json({ id: updated.id, prompt: updated.prompt });
+});
+
+/** L'assistente propone una griglia: resta in bozza finche' il docente non la approva. */
+router.post("/written-exams/:id/rubric-draft", requireTeacher, async (req, res): Promise<void> => {
+  const exam = await examWithEditableRubric(req, res);
+  if (!exam) return;
+  const [material] = await db.select().from(materialsTable).where(eq(materialsTable.id, exam.materialId));
+  try {
+    const rubric = parseRubric(
+      await generateRubric({
+        examType: exam.examType,
+        subject: material?.subject ?? "",
+        gradeLevel: material?.gradeLevel ?? "",
+        prompt: exam.prompt,
+      }),
+    );
+    const [updated] = await db
+      .update(writtenExamsTable)
+      .set({ rubric, rubricStatus: "bozza" })
+      .where(eq(writtenExamsTable.id, exam.id))
+      .returning();
+    res.json(teacherRubric(updated));
+  } catch (err) {
+    req.log.error({ err }, "Generazione griglia fallita");
+    res.status(502).json({ error: "L'assistente non e' riuscito a proporre una griglia. Riprova, o scrivila tu." });
+  }
+});
+
+/** Il docente salva la sua griglia, e se vuole la approva. */
+router.put("/written-exams/:id/rubric", requireTeacher, async (req, res): Promise<void> => {
+  // Prima si controlla che il compito sia suo: un estraneo non deve capire
+  // nemmeno se la sua richiesta era ben formata.
+  const exam = await examWithEditableRubric(req, res);
+  if (!exam) return;
+  const parsed = RubricBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  let rubric;
+  try {
+    rubric = parseRubric(parsed.data.criteria);
+  } catch (err) {
+    if (!(err instanceof RubricError)) throw err;
+    res.status(400).json({ error: err.message });
+    return;
+  }
+  const [updated] = await db
+    .update(writtenExamsTable)
+    .set({ rubric, rubricStatus: parsed.data.approved ? "approvata" : "bozza" })
+    .where(eq(writtenExamsTable.id, exam.id))
+    .returning();
+  res.json(teacherRubric(updated));
+});
+
+router.delete("/written-exams/:id/rubric", requireTeacher, async (req, res): Promise<void> => {
+  const exam = await examWithEditableRubric(req, res);
+  if (!exam) return;
+  await db.update(writtenExamsTable).set({ rubric: null, rubricStatus: "bozza" }).where(eq(writtenExamsTable.id, exam.id));
+  res.json({ rubric: null, rubricStatus: null });
 });
 
 /** Il docente ritira un compito assegnato (e le relative consegne). */
@@ -235,6 +418,14 @@ router.delete("/written-exams/:id", requireTeacher, async (req, res): Promise<vo
     return;
   }
 
+  // Le diagnosi non hanno una chiave esterna verso le consegne (la sorgente e'
+  // polimorfica): vanno tolte a mano prima che la cascata cancelli le consegne.
+  const submissions = await db
+    .select({ id: writtenExamSubmissionsTable.id })
+    .from(writtenExamSubmissionsTable)
+    .where(eq(writtenExamSubmissionsTable.examId, id));
+  await deleteDiagnosisForSources("scritto", submissions.map((s) => s.id));
+  await dropEvidenceForSources("scritto", submissions.map((s) => s.id));
   await db.delete(writtenExamsTable).where(eq(writtenExamsTable.id, id));
   res.status(204).end();
 });
@@ -275,6 +466,11 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
     return;
   }
 
+  if (exam.recoverySetId !== null && !(await recoveryRecipientIds(exam.recoverySetId)).includes(student.id)) {
+    res.status(404).json({ error: "Compito non trovato" });
+    return;
+  }
+
   // Una consegna per studente: il compito non si rifà.
   const [existing] = await db
     .select({ id: writtenExamSubmissionsTable.id })
@@ -290,14 +486,66 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
     return;
   }
 
+  // Un'esposizione si consegna a voce; gli altri compiti per iscritto.
+  const spoken = isSpokenAssignment(exam.examType);
+  if (spoken && !parsed.data.audioObjectPath) {
+    res.status(400).json({ error: "Registra la tua esposizione prima di consegnare." });
+    return;
+  }
+  if (!spoken && (parsed.data.audioObjectPath || !parsed.data.studentAnswer)) {
+    res.status(400).json({ error: "Scrivi il tuo elaborato prima di consegnare." });
+    return;
+  }
+  if (spoken) {
+    // L'assistente non ascolta le registrazioni: nessuna proposta, nessuna
+    // diagnosi. La valutazione e' tutta del docente, che ascolta.
+    const [created] = await db
+      .insert(writtenExamSubmissionsTable)
+      .values({
+        examId,
+        authUserId: req.authUserId!,
+        studentName: student.name,
+        classId: student.classId,
+        gradeScale: await scaleForClass(student.classId),
+        answer: parsed.data.studentAnswer || SPOKEN_ANSWER_PLACEHOLDER,
+        audioObjectPath: parsed.data.audioObjectPath!,
+        audioSeconds: parsed.data.audioSeconds ?? null,
+        aiGrade: null,
+        aiFeedback: "",
+      })
+      .returning();
+    res.status(201).json({
+      id: created.id,
+      examId: created.examId,
+      answer: created.answer,
+      audioObjectPath: created.audioObjectPath,
+      status: created.validationStatus,
+      grade: null,
+      feedback: null,
+      createdAt: created.createdAt,
+    });
+    return;
+  }
+
   req.log.info({ examId }, "Grading written exam submission");
 
-  const { grade, feedback } = await gradeWrittenExam(
+  const candidates = await candidateObjectivesForStudentWork({
+    classId: student.classId,
+    subject: material.subject,
+    gradeLevel: material.gradeLevel,
+    materialId: material.id,
+    priorityObjectiveIds: exam.recoverySetId !== null ? await recoveryObjectiveIds(exam.recoverySetId) : undefined,
+  });
+  const rubric = approvedRubric(exam);
+  const { grade, feedback, diagnosis, rubricScores } = await gradeWrittenExam(
     exam.examType,
     exam.prompt,
     material.subject,
     parsed.data.studentAnswer,
+    toCandidates(candidates),
+    rubric ?? [],
   );
+  const aiRubricScores = rubric ? parseRubricScores(rubricScores, rubric) : null;
 
   const [created] = await db
     .insert(writtenExamSubmissionsTable)
@@ -306,11 +554,28 @@ router.post("/written-exams/:id/submit", requireAuth, async (req, res): Promise<
       authUserId: req.authUserId!,
       studentName: student.name,
       classId: student.classId,
+      gradeScale: await scaleForClass(student.classId),
       answer: parsed.data.studentAnswer,
       aiGrade: typeof grade === "number" ? Math.round(grade) : null,
       aiFeedback: feedback ?? "",
+      aiRubricScores,
     })
     .returning();
+
+  // La diagnosi e' un di piu' rispetto al voto: se manca, la consegna vale lo stesso.
+  try {
+    const stored = await storeDiagnosis({
+      sourceKind: "scritto",
+      sourceId: created.id,
+      authUserId: req.authUserId!,
+      classId: student.classId,
+      items: diagnosis,
+      candidates,
+    });
+    if (!stored) req.log.warn({ submissionId: created.id }, "Nessuna diagnosi valida dal modello");
+  } catch (err) {
+    req.log.error({ err, submissionId: created.id }, "Diagnosi non salvata");
+  }
 
   res.status(201).json({
     id: created.id,

@@ -18,7 +18,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { HintsEditor, HintsPreview, cleanHints } from "@/components/HintsEditor";
 import {
+  Lightbulb,
   ArrowLeft,
   Check,
   CheckCheck,
@@ -42,6 +44,8 @@ interface QuestionRow {
   status?: "bozza" | "approvata";
   authorType?: "ai" | "docente";
   editedByTeacher?: boolean;
+  hints?: string[];
+  hintsStatus?: "bozza" | "approvati";
 }
 
 const DIFFICULTIES: Difficulty[] = ["facile", "medio", "difficile"];
@@ -65,11 +69,14 @@ function QuestionCard({
   const [answer, setAnswer] = useState(q.answer);
   const [topic, setTopic] = useState(q.topic);
   const [difficulty, setDifficulty] = useState<Difficulty>(q.difficulty);
+  const [hints, setHints] = useState<string[]>(q.hints ?? []);
 
   const isDraft = q.status === "bozza";
+  // Aiuti proposti dopo l'approvazione della domanda: aspettano il docente.
+  const hintsDraft = !isDraft && q.hintsStatus === "bozza" && (q.hints?.length ?? 0) > 0;
 
   function save() {
-    onSave({ question, answer, topic, difficulty });
+    onSave({ question, answer, topic, difficulty, hints: cleanHints(hints) });
     setEditing(false);
   }
 
@@ -78,6 +85,7 @@ function QuestionCard({
     setAnswer(q.answer);
     setTopic(q.topic);
     setDifficulty(q.difficulty);
+    setHints(q.hints ?? []);
     setEditing(false);
   }
 
@@ -108,7 +116,15 @@ function QuestionCard({
           )}
           <div className="ml-auto flex gap-1">
             {!editing && (
-              <Button variant="ghost" size="icon" onClick={() => setEditing(true)} title="Modifica">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setHints(q.hints ?? []);
+                  setEditing(true);
+                }}
+                title="Modifica"
+              >
                 <Pencil className="h-4 w-4" />
               </Button>
             )}
@@ -155,6 +171,7 @@ function QuestionCard({
                 </select>
               </div>
             </div>
+            <HintsEditor value={hints} onChange={setHints} />
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={cancel}>
                 <X className="mr-2 h-4 w-4" />
@@ -170,6 +187,13 @@ function QuestionCard({
           <>
             <p className="font-medium leading-relaxed">{q.question}</p>
             <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{q.answer}</p>
+            <HintsPreview hints={q.hints} draft={hintsDraft} />
+            {hintsDraft && (
+              <Button size="sm" variant="outline" onClick={() => onSave({ hints: q.hints })} disabled={busy}>
+                <Check className="mr-2 h-4 w-4" />
+                Approva questi aiuti
+              </Button>
+            )}
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <Badge variant="secondary" className="text-[10px]">{q.topic}</Badge>
               <Badge variant="outline" className="text-[10px] capitalize">{q.difficulty}</Badge>
@@ -193,7 +217,13 @@ export default function CattedraDomande() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
-  const [newQ, setNewQ] = useState({ question: "", answer: "", topic: "", difficulty: "medio" as Difficulty });
+  const [newQ, setNewQ] = useState({
+    question: "",
+    answer: "",
+    topic: "",
+    difficulty: "medio" as Difficulty,
+    hints: [] as string[],
+  });
 
   const { data: material } = useGetMaterial(materialId, {
     query: { enabled: !!materialId, queryKey: getGetMaterialQueryKey(materialId) },
@@ -260,20 +290,59 @@ export default function CattedraDomande() {
       customFetch(`/api/materials/${materialId}/questions`, {
         method: "POST",
         responseType: "json",
-        body: JSON.stringify(newQ),
+        body: JSON.stringify({ ...newQ, hints: cleanHints(newQ.hints) }),
       }),
     onSuccess: () => {
       toast({ title: "Domanda aggiunta", description: "È già disponibile per i tuoi studenti." });
-      setNewQ({ question: "", answer: "", topic: "", difficulty: "medio" });
+      setNewQ({ question: "", answer: "", topic: "", difficulty: "medio", hints: [] });
       setAdding(false);
       refresh();
     },
     onError,
   });
 
-  const busy = edit.isPending || approve.isPending || remove.isPending || approveAll.isPending;
+  const prepareHints = useMutation({
+    mutationFn: () =>
+      customFetch<{ prepared: number }>(`/api/materials/${materialId}/questions/hints`, {
+        method: "POST",
+        responseType: "json",
+      }),
+    onSuccess: (data) => {
+      toast({
+        title: data.prepared ? "Aiuti preparati" : "Nessun aiuto da preparare",
+        description: data.prepared
+          ? `Proposti per ${data.prepared} domande. Rileggili: gli studenti li vedranno solo dopo la tua approvazione.`
+          : "Tutte le domande hanno già i loro aiuti.",
+      });
+      refresh();
+    },
+    onError,
+  });
+
+  const approveHints = useMutation({
+    mutationFn: () =>
+      customFetch<{ approved: number }>(`/api/materials/${materialId}/questions/hints/approve`, {
+        method: "POST",
+        responseType: "json",
+      }),
+    onSuccess: () => {
+      toast({ title: "Aiuti approvati", description: "Ora gli studenti possono chiederli durante l'esercitazione." });
+      refresh();
+    },
+    onError,
+  });
+
+  const busy =
+    edit.isPending ||
+    approve.isPending ||
+    remove.isPending ||
+    approveAll.isPending ||
+    prepareHints.isPending ||
+    approveHints.isPending;
   const list = (questions ?? []) as QuestionRow[];
   const drafts = list.filter((q) => q.status === "bozza");
+  const withoutHints = list.filter((q) => !(q.hints?.length ?? 0));
+  const hintDrafts = list.filter((q) => q.status !== "bozza" && q.hintsStatus === "bozza" && (q.hints?.length ?? 0) > 0);
 
   return (
     <TeacherLayout>
@@ -312,6 +381,36 @@ export default function CattedraDomande() {
               )}
               Approva tutte
             </Button>
+          </div>
+        )}
+
+        {(withoutHints.length > 0 || hintDrafts.length > 0) && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border bg-card p-4">
+            <div>
+              <h3 className="font-medium flex items-center gap-2">
+                <Lightbulb className="h-4 w-4 text-amber-600" />
+                Aiuti per chi si blocca
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {hintDrafts.length > 0
+                  ? `${hintDrafts.length} ${hintDrafts.length === 1 ? "domanda ha" : "domande hanno"} aiuti proposti dall'assistente in attesa della tua approvazione.`
+                  : `${withoutHints.length} ${withoutHints.length === 1 ? "domanda non ha" : "domande non hanno"} aiuti. L'assistente può proporli: indizi graduali, mai la risposta.`}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              {hintDrafts.length > 0 && (
+                <Button onClick={() => approveHints.mutate()} disabled={busy}>
+                  {approveHints.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCheck className="mr-2 h-4 w-4" />}
+                  Approva gli aiuti
+                </Button>
+              )}
+              {withoutHints.length > 0 && (
+                <Button variant="outline" onClick={() => prepareHints.mutate()} disabled={busy}>
+                  {prepareHints.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                  Prepara gli aiuti
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
@@ -361,6 +460,7 @@ export default function CattedraDomande() {
                   </select>
                 </div>
               </div>
+              <HintsEditor value={newQ.hints} onChange={(hints) => setNewQ({ ...newQ, hints })} />
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setAdding(false)}>
                   Annulla

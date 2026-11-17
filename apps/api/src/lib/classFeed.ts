@@ -1,3 +1,4 @@
+import { pushToClasses } from "./push";
 import { db, classPostsTable } from "@sillabo/db";
 
 /**
@@ -39,6 +40,11 @@ export async function announceToClasses(input: {
         examDateId: input.examDateId ?? null,
       })),
     );
+    await pushToClasses(input.classIds, {
+      title: "Novita' dal tuo docente",
+      body: input.title.slice(0, 120),
+      link: "/studio/bacheca",
+    });
   } catch {
     // La bacheca e' un di piu': non deve mai bloccare il gesto del docente.
   }

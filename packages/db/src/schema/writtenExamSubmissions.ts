@@ -1,7 +1,7 @@
-import { pgTable, serial, text, timestamp, integer, unique } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, unique, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { writtenExamsTable } from "./writtenExams";
+import { writtenExamsTable, type RubricScore } from "./writtenExams";
 import { teachersTable } from "./teachers";
 
 /**
@@ -23,10 +23,18 @@ export const writtenExamSubmissionsTable = pgTable(
     studentName: text("student_name").notNull(),
     classId: integer("class_id"),
     answer: text("answer").notNull(),
+    /** Registrazione vocale della consegna (percorso nel bucket privato), per le esposizioni a voce. */
+    audioObjectPath: text("audio_object_path"),
+    /** Durata della registrazione, in secondi. */
+    audioSeconds: integer("audio_seconds"),
     /** Proposta dell'assistente, mai mostrata da sola allo studente. */
     aiGrade: integer("ai_grade"),
     aiFeedback: text("ai_feedback").notNull().default(""),
-    /** "da_validare" | "validata" */
+    /** Punteggi per criterio proposti dall'assistente (se il compito ha una griglia). */
+    aiRubricScores: jsonb("ai_rubric_scores").$type<RubricScore[]>(),
+    /** Punteggi per criterio firmati dal docente: gli unici che lo studente vede. */
+    teacherRubricScores: jsonb("teacher_rubric_scores").$type<RubricScore[]>(),
+    /** "da_validare" | "da_confermare" (preparata da un tutor) | "validata" */
     validationStatus: text("validation_status").notNull().default("da_validare"),
     teacherGrade: integer("teacher_grade"),
     teacherFeedback: text("teacher_feedback"),
@@ -34,6 +42,16 @@ export const writtenExamSubmissionsTable = pgTable(
       onDelete: "set null",
     }),
     validatedAt: timestamp("validated_at", { withTimezone: true }),
+    /**
+     * La scala in cui e' espresso il voto del docente ("decimi" | "trentesimi" |
+     * "centesimi"), fissata alla consegna da quella dell'istituto. Le proposte
+     * dell'assistente restano in decimi e si convertono solo per mostrarle.
+     */
+    gradeScale: text("grade_scale").notNull().default("decimi"),
+    /** Il tutor che ha preparato la correzione, confermata poi dal docente titolare. */
+    preparedByTeacherId: integer("prepared_by_teacher_id").references(() => teachersTable.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique("written_exam_submissions_unique").on(t.examId, t.authUserId)],

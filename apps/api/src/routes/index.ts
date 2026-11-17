@@ -23,6 +23,18 @@ import classPostsRouter from "./classPosts";
 import registroRouter from "./registro";
 import invitesRouter from "./invites";
 import scrutiniRouter from "./scrutini";
+import objectivesRouter from "./objectives";
+import recoveryRouter from "./recovery";
+import classMapRouter from "./classMap";
+import metricsRouter from "./metrics";
+import courseRouter from "./course";
+import devicesRouter from "./devices";
+import guidedRouter from "./guided";
+import agendaRouter from "./agenda";
+import materialToolsRouter from "./materialTools";
+import invalsiRouter from "./invalsi";
+import participationRouter from "./participation";
+import institutionProfileRouter from "./institutionProfile";
 
 const router: IRouter = Router();
 
@@ -50,5 +62,17 @@ router.use(classPostsRouter);
 router.use(registroRouter);
 router.use(invitesRouter);
 router.use(scrutiniRouter);
+router.use(objectivesRouter);
+router.use(recoveryRouter);
+router.use(classMapRouter);
+router.use(metricsRouter);
+router.use(courseRouter);
+router.use(devicesRouter);
+router.use(guidedRouter);
+router.use(agendaRouter);
+router.use(materialToolsRouter);
+router.use(invalsiRouter);
+router.use(participationRouter);
+router.use(institutionProfileRouter);
 
 export default router;

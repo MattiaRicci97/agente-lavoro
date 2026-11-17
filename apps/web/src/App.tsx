@@ -1,3 +1,4 @@
+import { NativeBridge } from "@/lib/nativeBridge";
 import { useEffect, useRef } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
@@ -14,6 +15,16 @@ import Onboarding from "./pages/Onboarding";
 import Invito, { PENDING_INVITE_KEY } from "./pages/Invito";
 import JoinClass from "./pages/JoinClass";
 import CattedraDashboard from "./pages/CattedraDashboard";
+import CattedraObiettivi from "./pages/CattedraObiettivi";
+import CattedraRecupero from "./pages/CattedraRecupero";
+import CattedraMappa from "./pages/CattedraMappa";
+import CattedraEfficacia from "./pages/CattedraEfficacia";
+import StudioCorso from "./pages/StudioCorso";
+import StudioAttivita from "./pages/StudioAttivita";
+import StudioStrumenti from "./pages/StudioStrumenti";
+import StudioProva from "./pages/StudioProva";
+import CattedraInvalsi from "./pages/CattedraInvalsi";
+import CattedraAttivita from "./pages/CattedraAttivita";
 import CattedraClassi from "./pages/CattedraClassi";
 import CattedraProfilo from "./pages/CattedraProfilo";
 import CattedraAssistente from "./pages/CattedraAssistente";
@@ -222,6 +233,36 @@ function Router() {
           <CattedraScrutinio />
         </TeacherGate>
       </Route>
+      <Route path="/cattedra/efficacia">
+        <TeacherGate>
+          <CattedraEfficacia />
+        </TeacherGate>
+      </Route>
+      <Route path="/cattedra/invalsi">
+        <TeacherGate>
+          <CattedraInvalsi />
+        </TeacherGate>
+      </Route>
+      <Route path="/cattedra/attivita">
+        <TeacherGate>
+          <CattedraAttivita />
+        </TeacherGate>
+      </Route>
+      <Route path="/cattedra/mappa">
+        <TeacherGate>
+          <CattedraMappa />
+        </TeacherGate>
+      </Route>
+      <Route path="/cattedra/recupero">
+        <TeacherGate>
+          <CattedraRecupero />
+        </TeacherGate>
+      </Route>
+      <Route path="/cattedra/obiettivi">
+        <TeacherGate>
+          <CattedraObiettivi />
+        </TeacherGate>
+      </Route>
       <Route path="/cattedra/registro">
         <TeacherGate>
           <CattedraRegistro />
@@ -268,6 +309,21 @@ function Router() {
           <StudioDashboard />
         </StudentGate>
       </Route>
+      <Route path="/studio/prova/:id">
+        <StudentGate>
+          <StudioProva />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/attivita/:id">
+        <StudentGate>
+          <StudioAttivita />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/corso">
+        <StudentGate>
+          <StudioCorso />
+        </StudentGate>
+      </Route>
       <Route path="/studio/bacheca">
         <StudentGate>
           <StudioBacheca />
@@ -301,6 +357,11 @@ function Router() {
       <Route path="/studio/finanza/:id">
         <StudentGate>
           <StudioFinEdLesson />
+        </StudentGate>
+      </Route>
+      <Route path="/studio/material/:id/strumenti">
+        <StudentGate>
+          <StudioStrumenti />
         </StudentGate>
       </Route>
       <Route path="/studio/material/:id/quiz">
@@ -361,6 +422,7 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClient}>
         <AuthQueryCacheInvalidator />
+        <NativeBridge />
         <TooltipProvider>
           <ErrorBoundary>
             <Router />

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useInstitutionProfile } from "@/lib/institutionProfile";
 import { createPortal } from "react-dom";
 import { useParams } from "wouter";
 import {
@@ -24,12 +25,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { CurriculumBadge } from "@/components/CurriculumBadge";
+import { RubricManager, type RubricCriterion } from "@/components/Rubric";
+import { MaterialParticipation } from "@/components/MaterialParticipation";
+import { MaterialTools } from "@/components/MaterialTools";
+import { PromptEditor } from "@/components/PromptEditor";
+import { EXAM_TYPE_LABELS, PRIMA_PROVA_TYPES, isMaturitaSimulation, type AssignableExamType } from "@/lib/examTypes";
+import { MaterialObjectives } from "@/components/MaterialObjectives";
 
-const examTypeLabels: Record<string, string> = {
-  tema: "Tema",
-  versione: "Versione",
-  problema: "Problema",
-};
+const examTypeLabels = EXAM_TYPE_LABELS;
 
 /** Compito assegnato, come lo vede il docente. */
 interface TeacherAssignment {
@@ -40,6 +43,8 @@ interface TeacherAssignment {
   instructions: string | null;
   submissionsCount: number;
   toValidateCount: number;
+  rubric: RubricCriterion[] | null;
+  rubricStatus: "bozza" | "approvata" | null;
 }
 
 interface PrintableExam {
@@ -89,6 +94,7 @@ function PrintableExamView({ exam, onClose }: { exam: PrintableExam; onClose: ()
 }
 
 export default function CattedraMaterial() {
+  const { shows } = useInstitutionProfile();
   const { id } = useParams();
   const materialId = parseInt(id || "0");
   const { toast } = useToast();
@@ -175,14 +181,16 @@ export default function CattedraMaterial() {
     });
   };
 
-  const handleAssign = (examType: "tema" | "versione" | "problema") => {
+  const handleAssign = (examType: AssignableExamType) => {
     assignHomework.mutate(
       { examType, dueDate: dueDate || null },
       {
         onSuccess: () => {
           toast({
-            title: "Compito assegnato",
-            description: `${examTypeLabels[examType]} visibile agli studenti delle classi collegate.`,
+            title: isMaturitaSimulation(examType) ? "Simulazione assegnata" : "Compito assegnato",
+            description: isMaturitaSimulation(examType)
+              ? "Ha già la griglia ministeriale. Rileggi la traccia: l'ha scritta l'assistente."
+              : `${examTypeLabels[examType]} visibile agli studenti delle classi collegate.`,
           });
           setDueDate("");
         },
@@ -239,6 +247,7 @@ export default function CattedraMaterial() {
               <h1 className="text-3xl font-bold tracking-tight">{material.title}</h1>
               <p className="text-muted-foreground mt-1">{material.subject} • {material.gradeLevel}</p>
               <CurriculumBadge topic={material.curriculumTopic} subtopic={material.curriculumSubtopic} />
+              <MaterialObjectives materialId={material.id} subject={material.subject} />
             </div>
             {!material.questionCount && (
               <Button onClick={handleGenerateQuestions} disabled={generateQuestions.isPending}>
@@ -314,31 +323,11 @@ export default function CattedraMaterial() {
                 )}
               </CardContent>
             </Card>
+
+            <MaterialParticipation materialId={materialId} />
           </div>
 
           <div className="space-y-6">
-            <Card className="border-destructive/20 bg-destructive/5">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2 text-destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  Studenti a rischio
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {analyticsLoading ? <Skeleton className="h-16" /> : !analytics?.atRiskStudents.length ? (
-                  <div className="text-sm text-muted-foreground">Nessuno studente a rischio rilevato.</div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {analytics.atRiskStudents.map((name, i) => (
-                      <span key={i} className="px-2 py-1 bg-destructive/10 text-destructive text-xs font-medium rounded-md">
-                        {name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm">Le tue domande ({material.questionCount})</CardTitle>
@@ -396,12 +385,13 @@ export default function CattedraMaterial() {
                   <Label className="text-xs">Consegna entro (facoltativo)</Label>
                   <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["tema", "versione", "problema"] as const).map((type) => (
+                <div className="grid grid-cols-2 gap-2">
+                  {(["tema", "versione", "problema", "esposizione"] as const).map((type) => (
                     <Button
                       key={type}
                       size="sm"
                       variant="outline"
+                      title={type === "esposizione" ? "Lo studente registra la risposta a voce; la ascolti e la valuti tu" : undefined}
                       onClick={() => handleAssign(type)}
                       disabled={assignHomework.isPending}
                     >
@@ -409,6 +399,28 @@ export default function CattedraMaterial() {
                     </Button>
                   ))}
                 </div>
+{shows("maturita") && (
+                <div className="rounded-md border p-3 space-y-2">
+                  <div className="text-xs font-medium">Simulazione della prima prova di Maturità</div>
+                  <p className="text-xs text-muted-foreground">
+                    Traccia nel formato ministeriale e griglia con gli indicatori ufficiali, in ventesimi.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {PRIMA_PROVA_TYPES.map((t) => (
+                      <Button
+                        key={t.type}
+                        size="sm"
+                        variant="outline"
+                        title={t.hint}
+                        onClick={() => handleAssign(t.type)}
+                        disabled={assignHomework.isPending}
+                      >
+                        {assignHomework.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : t.short}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                )}
                 <div className="rounded-md border border-dashed p-3 space-y-2">
                   <div className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <Printer className="h-3.5 w-3.5" />
@@ -433,7 +445,7 @@ export default function CattedraMaterial() {
                 ) : !assignments?.length ? (
                   <div className="text-sm text-muted-foreground">Nessun compito assegnato.</div>
                 ) : (
-                  <div className="max-h-[280px] space-y-3 overflow-y-auto pr-2">
+                  <div className="max-h-[520px] space-y-3 overflow-y-auto pr-2">
                     {assignments.map((a) => (
                       <div key={a.id} className="border-b pb-3 text-sm last:border-0 last:pb-0">
                         <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -458,7 +470,20 @@ export default function CattedraMaterial() {
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
-                        <div className="line-clamp-2 text-xs text-muted-foreground">{a.prompt}</div>
+                        <PromptEditor
+                          examId={a.id}
+                          prompt={a.prompt}
+                          locked={a.submissionsCount > 0}
+                          highlight={isMaturitaSimulation(a.examType)}
+                          onChanged={() => queryClient.invalidateQueries({ queryKey: assignmentsKey })}
+                        />
+                        <RubricManager
+                          examId={a.id}
+                          rubric={a.rubric}
+                          status={a.rubricStatus}
+                          locked={a.submissionsCount > 0}
+                          onChanged={() => queryClient.invalidateQueries({ queryKey: assignmentsKey })}
+                        />
                         {a.toValidateCount > 0 && (
                           <Link href="/cattedra/validazioni">
                             <span className="mt-1.5 inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary">
@@ -473,6 +498,8 @@ export default function CattedraMaterial() {
                 )}
               </CardContent>
             </Card>
+
+            <MaterialTools materialId={materialId} />
 
             <Card>
               <CardHeader>

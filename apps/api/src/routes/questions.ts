@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, asc, and } from "drizzle-orm";
+import { eq, asc, and, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, materialsTable, questionsTable, teachersTable } from "@sillabo/db";
 import {
@@ -8,14 +8,18 @@ import {
   ListQuestionsParams,
   ListQuestionsResponse,
 } from "@sillabo/api-zod";
-import { generateActiveRecallQuestions } from "../lib/ai";
+import { generateActiveRecallQuestions, generateHints, normalizeHints, MAX_HINTS } from "../lib/ai";
+import { teacherCanManageMaterial } from "../lib/materialAccess";
 import { requireAuth, requireTeacher } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
 const DIFFICULTIES = ["facile", "medio", "difficile"] as const;
 
+const HintsField = z.array(z.string().max(300)).max(MAX_HINTS);
+
 const EditQuestionSchema = z.object({
+  hints: HintsField.optional(),
   question: z.string().trim().min(1).max(2000).optional(),
   answer: z.string().trim().min(1).max(4000).optional(),
   topic: z.string().trim().min(1).max(200).optional(),
@@ -27,6 +31,7 @@ const CreateQuestionSchema = z.object({
   answer: z.string().trim().min(1).max(4000),
   topic: z.string().trim().min(1).max(200),
   difficulty: z.enum(DIFFICULTIES).default("medio"),
+  hints: HintsField.default([]),
 });
 
 /** true se l'utente autenticato è un docente (vede anche le bozze). */
@@ -36,6 +41,24 @@ async function isTeacher(authUserId: string): Promise<boolean> {
     .from(teachersTable)
     .where(eq(teachersTable.authUserId, authUserId));
   return !!row;
+}
+
+/**
+ * Aggiunge gli aiuti alla risposta (lo schema generato non li conosce).
+ * Lo studente riceve solo quelli approvati dal docente.
+ */
+function withHints<T extends { id: number }>(
+  items: T[],
+  rows: Array<{ id: number; hints: string[]; hintsStatus: string }>,
+  teacher: boolean,
+): Array<T & { hints: string[]; hintsStatus?: string }> {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return items.map((item) => {
+    const row = byId.get(item.id);
+    const hints = row?.hints ?? [];
+    if (teacher) return { ...item, hints, hintsStatus: row?.hintsStatus ?? "approvati" };
+    return { ...item, hints: row?.hintsStatus === "approvati" ? hints : [] };
+  });
 }
 
 router.post("/materials/:id/generate-questions", requireTeacher, async (req, res): Promise<void> => {
@@ -76,11 +99,13 @@ router.post("/materials/:id/generate-questions", requireTeacher, async (req, res
         difficulty: q.difficulty,
         status: "bozza",
         authorType: "ai",
+        hints: q.hints,
+        hintsStatus: "bozza",
       })),
     )
     .returning();
 
-  res.status(201).json(GenerateQuestionsResponse.parse(rows));
+  res.status(201).json(withHints(GenerateQuestionsResponse.parse(rows), rows, true));
 });
 
 router.get("/materials/:id/questions", requireAuth, async (req, res): Promise<void> => {
@@ -98,7 +123,7 @@ router.get("/materials/:id/questions", requireAuth, async (req, res): Promise<vo
 
   const rows = await db.select().from(questionsTable).where(where).orderBy(asc(questionsTable.id));
 
-  res.json(ListQuestionsResponse.parse(rows));
+  res.json(withHints(ListQuestionsResponse.parse(rows), rows, teacher));
 });
 
 /** Il docente riscrive una domanda: resta sua, non dell'AI. */
@@ -124,10 +149,15 @@ router.patch("/questions/:id", requireTeacher, async (req, res): Promise<void> =
     (parsed.data.question !== undefined && parsed.data.question !== existing.question) ||
     (parsed.data.answer !== undefined && parsed.data.answer !== existing.answer);
 
+  // Gli aiuti salvati dal docente sono suoi: da quel momento sono approvati.
+  const hintsPatch =
+    parsed.data.hints !== undefined ? { hints: normalizeHints(parsed.data.hints), hintsStatus: "approvati" } : {};
+
   const [updated] = await db
     .update(questionsTable)
     .set({
       ...parsed.data,
+      ...hintsPatch,
       editedByTeacher: existing.editedByTeacher || textChanged,
     })
     .where(eq(questionsTable.id, id))
@@ -146,7 +176,7 @@ router.post("/questions/:id/approve", requireTeacher, async (req, res): Promise<
 
   const [updated] = await db
     .update(questionsTable)
-    .set({ status: "approvata" })
+    .set({ status: "approvata", hintsStatus: "approvati" })
     .where(eq(questionsTable.id, id))
     .returning();
 
@@ -167,7 +197,7 @@ router.post("/materials/:id/questions/approve-all", requireTeacher, async (req, 
 
   const rows = await db
     .update(questionsTable)
-    .set({ status: "approvata" })
+    .set({ status: "approvata", hintsStatus: "approvati" })
     .where(and(eq(questionsTable.materialId, materialId), eq(questionsTable.status, "bozza")))
     .returning();
 
@@ -198,12 +228,66 @@ router.post("/materials/:id/questions", requireTeacher, async (req, res): Promis
     .values({
       materialId,
       ...parsed.data,
+      hints: normalizeHints(parsed.data.hints),
+      hintsStatus: "approvati",
       status: "approvata",
       authorType: "docente",
     })
     .returning();
 
   res.status(201).json(row);
+});
+
+/**
+ * L'assistente propone gli aiuti per le domande che non ne hanno. Restano in
+ * bozza: gli studenti non li vedono finche' il docente non li approva.
+ */
+router.post("/materials/:id/questions/hints", requireTeacher, async (req, res): Promise<void> => {
+  const materialId = Number(req.params.id);
+  if (!Number.isInteger(materialId) || !(await teacherCanManageMaterial(req.teacher!.id, materialId))) {
+    res.status(404).json({ error: "Materiale non trovato" });
+    return;
+  }
+  const [material] = await db.select().from(materialsTable).where(eq(materialsTable.id, materialId));
+  const missing = await db
+    .select()
+    .from(questionsTable)
+    .where(and(eq(questionsTable.materialId, materialId), sql`jsonb_array_length(${questionsTable.hints}) = 0`))
+    .orderBy(asc(questionsTable.id))
+    .limit(40);
+  if (!material || !missing.length) {
+    res.json({ prepared: 0 });
+    return;
+  }
+  try {
+    const drafts = await generateHints({
+      subject: material.subject,
+      gradeLevel: material.gradeLevel,
+      questions: missing.map((q) => ({ id: q.id, question: q.question, answer: q.answer })),
+    });
+    for (const [id, hints] of drafts) {
+      await db.update(questionsTable).set({ hints, hintsStatus: "bozza" }).where(eq(questionsTable.id, id));
+    }
+    res.json({ prepared: drafts.size });
+  } catch (err) {
+    req.log.error({ err }, "Generazione aiuti fallita");
+    res.status(502).json({ error: "L'assistente non e' riuscito a preparare gli aiuti. Riprova, o scrivili tu." });
+  }
+});
+
+/** Il docente approva in blocco gli aiuti in bozza delle domande gia' approvate. */
+router.post("/materials/:id/questions/hints/approve", requireTeacher, async (req, res): Promise<void> => {
+  const materialId = Number(req.params.id);
+  if (!Number.isInteger(materialId) || !(await teacherCanManageMaterial(req.teacher!.id, materialId))) {
+    res.status(404).json({ error: "Materiale non trovato" });
+    return;
+  }
+  const rows = await db
+    .update(questionsTable)
+    .set({ hintsStatus: "approvati" })
+    .where(and(eq(questionsTable.materialId, materialId), eq(questionsTable.hintsStatus, "bozza")))
+    .returning({ id: questionsTable.id });
+  res.json({ approved: rows.length });
 });
 
 /** Elimina una domanda (anche una bozza che non convince). */

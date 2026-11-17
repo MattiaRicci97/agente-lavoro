@@ -20,11 +20,17 @@ export const oralSessionsTable = pgTable("oral_sessions", {
   classId: integer("class_id"),
   studentName: text("student_name").notNull(),
   status: text("status").notNull().default("in_corso"),
+  /**
+   * Interrogazione su un argomento del corso (chiesta dalla chat di ripasso):
+   * l'argomento e i passaggi del corso su cui verte, fissati all'avvio.
+   */
+  focusTopic: text("focus_topic"),
+  focusContent: text("focus_content"),
   // --- Proposta dell'assistente ---
   grade: integer("grade"),
   feedback: text("feedback"),
   // --- Visto del docente ---
-  /** "da_validare" | "validata" */
+  /** "da_validare" | "da_confermare" (preparata da un tutor) | "validata" */
   validationStatus: text("validation_status").notNull().default("da_validare"),
   teacherGrade: integer("teacher_grade"),
   teacherFeedback: text("teacher_feedback"),
@@ -32,6 +38,16 @@ export const oralSessionsTable = pgTable("oral_sessions", {
     onDelete: "set null",
   }),
   validatedAt: timestamp("validated_at", { withTimezone: true }),
+  /**
+   * La scala in cui e' espresso il voto del docente ("decimi" | "trentesimi" |
+   * "centesimi"), fissata alla consegna da quella dell'istituto. Le proposte
+   * dell'assistente restano in decimi e si convertono solo per mostrarle.
+   */
+  gradeScale: text("grade_scale").notNull().default("decimi"),
+  /** Il tutor che ha preparato la correzione, confermata poi dal docente titolare. */
+  preparedByTeacherId: integer("prepared_by_teacher_id").references(() => teachersTable.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

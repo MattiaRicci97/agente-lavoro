@@ -27,7 +27,7 @@ export const classTeachersTable = pgTable(
       .references(() => teachersTable.id, { onDelete: "cascade" }),
     /** Materia insegnata in questa classe. */
     subject: text("subject").notNull().default(""),
-    /** "coordinatore" | "docente" */
+    /** "coordinatore" | "docente" | "tutor" (prepara le correzioni, le conferma un docente) */
     role: text("role").notNull().default("docente"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

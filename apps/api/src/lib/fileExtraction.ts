@@ -1,13 +1,18 @@
+import { stripSubtitleMarkup } from "./courseSearch";
 import { extractText, getDocumentProxy } from "unpdf";
 import mammoth from "mammoth";
 import { downloadObject } from "./storage";
 
 export class UnsupportedFileTypeError extends Error {
   constructor(fileName: string) {
-    super(`Formato file non supportato: ${fileName}. Sono ammessi solo PDF e Word (.pdf, .doc, .docx).`);
+    super(`Formato file non supportato: ${fileName}. Sono ammessi PDF, Word (.pdf, .doc, .docx) e, per le trascrizioni, testo o sottotitoli (.txt, .vtt, .srt).`);
     this.name = "UnsupportedFileTypeError";
     Object.setPrototypeOf(this, UnsupportedFileTypeError.prototype);
   }
+}
+
+function isPlainText(fileName: string): boolean {
+  return /\.(txt|vtt|srt|md)$/i.test(fileName);
 }
 
 export class EmptyExtractedContentError extends Error {
@@ -40,14 +45,18 @@ export async function extractTextFromUploadedFile(
   objectPath: string,
   fileName: string,
 ): Promise<string> {
-  if (!isPdf(fileName) && !isWord(fileName)) {
+  if (!isPdf(fileName) && !isWord(fileName) && !isPlainText(fileName)) {
     throw new UnsupportedFileTypeError(fileName);
   }
 
   const buffer = await downloadObject(accessToken, objectPath);
 
   let text = "";
-  if (isPdf(fileName)) {
+  if (isPlainText(fileName)) {
+    // Trascrizioni: testo semplice o sottotitoli esportati da Meet/Teams/registratori.
+    const raw = Buffer.from(buffer).toString("utf8").replace(/^\uFEFF/, "");
+    text = /\.(vtt|srt)$/i.test(fileName) ? stripSubtitleMarkup(raw) : raw;
+  } else if (isPdf(fileName)) {
     // unpdf: estrazione testo pensata per il serverless (niente canvas/DOMMatrix).
     const pdf = await getDocumentProxy(new Uint8Array(buffer));
     const result = await extractText(pdf, { mergePages: true });
